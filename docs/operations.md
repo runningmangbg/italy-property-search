@@ -35,6 +35,8 @@ Use `Authorization: Bearer <IMPORT_TOKEN>` over HTTPS:
 
 Photos are stored in `media`. Use a PostgreSQL backup for a complete restore; the JSON export does not contain photo bytes. Preserve the original source media.
 
+Photo refreshes preserve saved photos when the incoming photo list is omitted, null or empty. A non-empty list replaces the gallery metadata, so upload its matching image bytes first. Keep each source listing URL and a factual caption; an exact-property preview may be used when the full gallery cannot be retrieved. A blank gallery must not be treated as a completed photo import. For Idealista, verify whether an AI label is actually visible for that image: page text can include hidden `ai-photo-badge-detail` placeholders even when the displayed photograph has no such label. Do not classify an image as AI-modified from that hidden text alone.
+
 ## Handbook
 
 `/handbook/` and every nested chapter/stylesheet use the existing server-side sessions. Unauthenticated requests return to the login screen and resume the requested chapter after sign-in. Imported text lives in `handbook_files`, never in the public repository or public asset directory. The JSON export includes this table and edition metadata. Handbook pages prohibit scripts, forms, embedding and external resource loading through their content security policy.

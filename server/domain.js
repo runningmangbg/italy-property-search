@@ -56,6 +56,11 @@ export async function importProperties(db, payload) {
       const current = await tx.query('SELECT data, content_hash FROM properties WHERE id=$1 FOR UPDATE', [incoming.id]);
       // Sparse refreshes may not erase previously retained facts, source aliases, or history.
       const p = { ...(current.rows[0]?.data || {}), ...incoming };
+      // A failed image fetch is not evidence that previously saved photos vanished.
+      // Keep their metadata aligned with the durable media bytes on sparse refreshes.
+      if ((!Array.isArray(incoming.photos) || incoming.photos.length === 0) && current.rows[0]?.data.photos?.length) {
+        p.photos = current.rows[0].data.photos;
+      }
       if (current.rows[0]?.data.sources) {
         const sources = new Map();
         for (const s of [...current.rows[0].data.sources, ...(incoming.sources || [])]) sources.set(JSON.stringify(s), s);

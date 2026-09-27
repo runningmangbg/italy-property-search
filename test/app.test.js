@@ -114,3 +114,23 @@ test('profile-only imports preserve property evidence, shared decisions and refe
   assert.equal((await request(app).post('/api/import').set('Authorization',`Bearer ${secret}`).send(payload).expect(200)).body.repeated,true);
   await request(app).post('/api/import').set('Authorization',`Bearer ${secret}`).send({...payload,sourceRevision:'empty',meta:{}}).expect(400);
 });
+
+test('incomplete photo refreshes preserve the displayed gallery, stored media and decisions',async()=>{
+  const property={id:'DL001',name:'Mountain home',region:'Dolomiti',province:'Belluno',price:190000,score:70};
+  const photos=[{url:'https://example.com/house.jpg',source_url:'https://example.com/listing',caption:'House exterior'}];
+  const send=(sourceRevision,fields)=>request(app).post('/api/import').set('Authorization',`Bearer ${secret}`).send({sourceRevision,observedAt:'2026-09-27T17:00:00Z',properties:[{...property,...fields}]}).expect(200);
+  await send('photos-recovered',{photos});
+  const media=(await bob.get('/api/media/DL001/0').expect(200)).body;
+  for (const [index,fields] of [{},{photos:[]},{photos:null}].entries()) {
+    await send(`photos-incomplete-${index}`,{...fields,price:185000-index});
+    const detail=(await bob.get('/api/properties/DL001').expect(200)).body;
+    assert.deepEqual(detail.property.photos,photos);
+    assert.equal(detail.property.price,185000-index);
+    assert.equal(detail.property.status,'Closed');
+    assert.equal(detail.events[0].comment,'Access does not work for us.');
+    assert.deepEqual((await bob.get('/api/media/DL001/0').expect(200)).body,media);
+  }
+  const replacement=[{...photos[0],caption:'Corrected exterior caption'}];
+  await send('photos-replaced',{photos:replacement});
+  assert.deepEqual((await bob.get('/api/properties/DL001')).body.property.photos,replacement);
+});
