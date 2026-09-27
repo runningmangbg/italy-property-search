@@ -76,6 +76,8 @@ For user-authorized screening email, separate evidenced conflicts from unresolve
 
 ## Dolomiti search area
 
+For a brief-only update, use `POST /api/import` with `properties: []`, a new source revision, the actual profile observation time and only the changed metadata (for example `meta.profile`). This preserves property observations, snapshots and feedback. An empty import without writable metadata is rejected; reference metadata remains controlled by its separate importer.
+
 The current brief includes Abruzzo, Marche and the Dolomiti area. Use stable `DL` IDs (for example `DL001`) for newly assessed Dolomiti dossiers, `region: "Dolomiti"` as the search-area grouping, and the actual province. Record the actual administrative region separately in the dossier or optional `administrativeRegion` field. Dolomiti spans administrative boundaries; it is not a synonym for all of northern Italy. Retain existing AB/MR IDs and verified aliases.
 
 The API accepts DL IDs for imports, photo uploads, dossier routes and reference matches. `scripts/prepare-import.py` maps DL to Dolomiti and rejects unknown prefixes instead of silently assigning Marche. Reference homes keep their advertised administrative region. Explicitly selected homes outside the general discovery areas can receive individual assessment when the current brief permits it. Never infer a general expansion into another administrative region from an individual reference.

@@ -12,7 +12,7 @@ import { installReferences } from './references.js';
 const root = path.dirname(fileURLToPath(new URL('../package.json', import.meta.url)));
 const pid = z.string().regex(/^(AB|MR|DL)\d{3,6}$/);
 const propertySchema = z.object({ id: pid, name: z.string().min(1).max(500), price: z.number().nonnegative().nullable(), score: z.number().min(0).max(100).nullable(), region: z.enum(['Abruzzo', 'Marche', 'Dolomiti']), province: z.string().max(30) }).passthrough();
-const importSchema = z.object({ sourceRevision: z.string().min(1).max(200), observedAt: z.iso.datetime({ offset: true }), properties: z.array(propertySchema).min(1).max(3000), meta: z.record(z.string(), z.unknown()).optional() });
+const importSchema = z.object({ sourceRevision: z.string().min(1).max(200), observedAt: z.iso.datetime({ offset: true }), properties: z.array(propertySchema).max(3000), meta: z.record(z.string(), z.unknown()).optional() }).refine(p => p.properties.length > 0 || Object.keys(p.meta || {}).some(key => key !== 'idealistaReferences'), 'An import must contain properties or project metadata.');
 const decisionSchema = z.object({ requestId: z.uuid(), revision: z.number().int().nonnegative(), status: z.enum(['Open', 'Interested', 'On hold', 'Closed']), favourite: z.boolean(), comment: z.string().max(8000).default('') }).strict();
 
 export function createApp({ db, users = [], importToken = '', production = false, devPreview = false }) {

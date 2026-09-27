@@ -92,3 +92,17 @@ test('Dolomiti dossiers support imports, photos, reference links, routes and pre
   assert.equal(refreshed.events[0].comment,'Access does not work for us.');
   assert.equal((await bob.get('/api/properties')).body.properties.length,3);
 });
+
+test('profile-only imports preserve property evidence, shared decisions and reference metadata',async()=>{
+  const read=async()=>Object.fromEntries(await Promise.all(['properties','property_snapshots','decisions','feedback_events','reference_homes','reference_notes'].map(async table=>[table,(await db.query(`SELECT * FROM ${table} ORDER BY 1`)).rows])));
+  const before=await read();
+  const referenceMeta=(await db.query("SELECT value FROM project_meta WHERE key='idealistaReferences'")).rows[0].value;
+  const payload={sourceRevision:'expanded-profile',observedAt:'2026-09-27T16:00:00Z',properties:[],meta:{profile:'Abruzzo, Marche and Dolomiti',idealistaReferences:{sourceRevision:'stale-register-copy'}}};
+  const result=await request(app).post('/api/import').set('Authorization',`Bearer ${secret}`).send(payload).expect(200);
+  assert.equal(result.body.imported,0);
+  assert.deepEqual(await read(),before);
+  assert.deepEqual((await db.query("SELECT value FROM project_meta WHERE key='idealistaReferences'")).rows[0].value,referenceMeta);
+  assert.equal((await bob.get('/api/properties')).body.meta.profile,payload.meta.profile);
+  assert.equal((await request(app).post('/api/import').set('Authorization',`Bearer ${secret}`).send(payload).expect(200)).body.repeated,true);
+  await request(app).post('/api/import').set('Authorization',`Bearer ${secret}`).send({...payload,sourceRevision:'empty',meta:{}}).expect(400);
+});
