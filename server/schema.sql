@@ -61,3 +61,8 @@ CREATE TABLE IF NOT EXISTS import_runs (
   property_count integer NOT NULL,
   manifest_hash text NOT NULL
 );
+CREATE TABLE IF NOT EXISTS handbook_files (
+  path text PRIMARY KEY,
+  content text NOT NULL,
+  content_hash text NOT NULL
+);

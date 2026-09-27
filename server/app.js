@@ -6,6 +6,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { allProperties, digest, importProperties } from './domain.js';
 import { token, passwordMatches, sameSecret, hashPassword } from './auth.js';
+import { installHandbook } from './handbook.js';
 
 const root = path.dirname(fileURLToPath(new URL('../package.json', import.meta.url)));
 const pid = z.string().regex(/^(AB|MR)\d{3,6}$/);
@@ -20,15 +21,15 @@ export function createApp({ db, users = [], importToken = '', production = false
   app.set('trust proxy', 1);
   app.use(helmet({ contentSecurityPolicy: { directives: { defaultSrc: ["'self'"], scriptSrc: ["'self'"], styleSrc: ["'self'"], imgSrc: ["'self'", 'data:'], connectSrc: ["'self'"], objectSrc: ["'none'"], baseUri: ["'self'"], formAction: ["'self'"], frameAncestors: ["'none'"], upgradeInsecureRequests: production ? [] : null } }, crossOriginEmbedderPolicy: false, strictTransportSecurity: production ? undefined : false }));
   app.use((req, res, next) => { res.set('X-Robots-Tag', 'noindex, nofollow'); next(); });
-  app.use('/api', (req, res, next) => { res.set('Cache-Control', 'private, no-store'); next(); });
+  app.use(['/api', '/handbook'], (req, res, next) => { res.set('Cache-Control', 'private, no-store'); next(); });
   app.get('/api/health', async (req, res) => {
     try { if (!db) throw new Error(); await db.query('SELECT 1'); res.json({ status: 'ok' }); }
     catch { res.status(503).json({ status: 'setup_required' }); }
   });
-  app.use('/api', (req, res, next) => db ? next() : res.status(503).json({ error: 'The property collection is being connected. Please try again shortly.' }));
+  app.use(['/api', '/handbook'], (req, res, next) => db ? next() : res.status(503).json({ error: 'The property collection is being connected. Please try again shortly.' }));
   const cookieName = production ? '__Host-home_session' : 'home_session';
   const cookieOptions = { httpOnly: true, secure: production, sameSite: 'strict', path: '/', maxAge: 30 * 86400000 };
-  app.use('/api', async (req, res, next) => {
+  app.use(['/api', '/handbook'], async (req, res, next) => {
     if (devPreview) { req.user = { id: 'preview', name: 'Preview' }; req.csrf = 'preview'; return next(); }
     const cookies = Object.fromEntries((req.headers.cookie || '').split(';').map(s => s.trim().split('=')));
     const value = cookies[cookieName];
@@ -120,11 +121,12 @@ export function createApp({ db, users = [], importToken = '', production = false
   });
   app.get('/api/export', importer, async (req, res) => {
     const result = {};
-    for (const table of ['properties', 'decisions', 'feedback_events', 'property_snapshots', 'project_meta', 'import_runs']) result[table] = (await db.query(`SELECT * FROM ${table}`)).rows;
+    for (const table of ['properties', 'decisions', 'feedback_events', 'property_snapshots', 'project_meta', 'import_runs', 'handbook_files']) result[table] = (await db.query(`SELECT * FROM ${table}`)).rows;
     result.exportedAt = new Date().toISOString();
     res.json(result);
   });
   app.get('/api/feedback-export', importer, async (req, res) => res.json({ decisions: (await db.query('SELECT * FROM decisions ORDER BY property_id')).rows, events: (await db.query('SELECT * FROM feedback_events ORDER BY id')).rows }));
+  installHandbook(app, { db, importer });
   app.use('/api', (req, res) => res.status(404).json({ error: 'Endpoint not found.' }));
   app.use(express.static(path.join(root, 'public'), { dotfiles: 'deny', maxAge: 0 }));
   app.get(/^\/(?:properties\/(?:AB|MR)\d+|(?:AB|MR)\d+\.html)$/, (req, res) => res.sendFile(path.join(root, 'public/index.html')));

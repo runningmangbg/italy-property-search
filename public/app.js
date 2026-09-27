@@ -15,7 +15,7 @@ async function api(path, options = {}) {
   return data;
 }
 function header() {
-  account.innerHTML = state.user ? `<div class="account"><span class="name">${esc(state.user.name)}</span><button id="logout">Sign out</button></div>` : '';
+  account.innerHTML = state.user ? `<div class="account"><a class="handbook-link" href="/handbook/" lang="sv">Handboken</a><span class="name">${esc(state.user.name)}</span><button id="logout">Sign out</button></div>` : '';
 }
 function login(error = '') {
   state.user = null; header();
@@ -67,7 +67,7 @@ function renderWeekly() {
   document.querySelector('#collection-content').innerHTML = `<div class="timeline">${runs.length ? runs.map(r => `<article class="panel"><div class="eyebrow">${date(r.scan_date)}</div><h2>${esc(r.status)}</h2><p>${esc(r.summary)}</p><p class="small muted">${esc(r.coverage_note)}</p><div class="scan-links">${(r.new_to_register_ids || []).map(id => `<a href="/properties/${esc(id)}" data-property="${esc(id)}">${esc(id)}</a>`).join('')}</div></article>`).join('') : '<div class="empty">No search reports have been imported yet.</div>'}</div><p class="small muted">These are recorded searches, not a claim of current availability. New-to-register does not mean newly listed.</p>`;
 }
 function renderProfile() {
-  document.querySelector('#collection-content').innerHTML = `<section class="panel"><h2>Our home + B&B brief</h2><p>Purchase target €200,000; absolute ceiling €250,000. Development baseline €150,000. An optional additional €50,000 means an extra year, approximately three years in total.</p><p class="notice">Land supports physical potential for a pool, parking and growing. Planning permission, conversions and the legal use of agricultural land always need separate verification.</p><p>${state.meta.profileUrl ? link(state.meta.profileUrl, 'Open the authoritative Master Profile') : ''}</p>${state.meta.profile ? `<details><summary>Read the full profile</summary><div class="details-body">${esc(state.meta.profile).replace(/\r?\n/g, '<br>')}</div></details>` : ''}<p class="small">${state.meta.handbookUrl ? link(state.meta.handbookUrl, 'Location handbook') : ''} ${state.meta.registerUrl ? ' · ' + link(state.meta.registerUrl, 'Source register') : ''}</p></section>`;
+  document.querySelector('#collection-content').innerHTML = `<section class="panel"><h2>Our home + B&B brief</h2><p>Purchase target €200,000; absolute ceiling €250,000. Development baseline €150,000. An optional additional €50,000 means an extra year, approximately three years in total.</p><p class="notice">Land supports physical potential for a pool, parking and growing. Planning permission, conversions and the legal use of agricultural land always need separate verification.</p><p>${state.meta.profileUrl ? link(state.meta.profileUrl, 'Open the authoritative Master Profile') : ''}</p>${state.meta.profile ? `<details><summary>Read the full profile</summary><div class="details-body">${esc(state.meta.profile).replace(/\r?\n/g, '<br>')}</div></details>` : ''}<p class="small"><a href="/handbook/" lang="sv">Handboken · Abruzzo &amp; Marche</a> ${state.meta.registerUrl ? ' · ' + link(state.meta.registerUrl, 'Source register') : ''}</p></section>`;
 }
 function renderCompare() {
   const ps = state.properties.filter(p => state.compare.has(p.id));
@@ -136,6 +136,12 @@ document.addEventListener('submit', async event => {
   }
   button.disabled = false;
 });
-function route() { const match = /^\/(?:properties\/)?((?:AB|MR)\d+)(?:\.html)?$/.exec(location.pathname); match ? showProperty(match[1]) : collection(); }
+function route() {
+  const next = new URLSearchParams(location.search).get('next');
+  if (next && state.user) {
+    try { const destination = new URL(next, location.origin); if (destination.origin === location.origin && /^\/handbook(?:\/|$)/.test(destination.pathname)) { location.assign(destination.href); return; } } catch {}
+  }
+  const match = /^\/(?:properties\/)?((?:AB|MR)\d+)(?:\.html)?$/.exec(location.pathname); match ? showProperty(match[1]) : collection();
+}
 window.addEventListener('popstate', route);
 (async () => { try { const session = await api('/api/session'); state.user = session.user; state.csrf = session.csrf; header(); await refresh(); route(); } catch (e) { login(e.status === 401 ? '' : e.message); } })();

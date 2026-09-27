@@ -10,6 +10,7 @@ A private collection for exploring and comparing homes in Abruzzo and Marche, wi
 - Individual password sign-ins, server-side sessions, CSRF protection and rate-limited login.
 - Shared PostgreSQL comments and decisions, atomic writes, optimistic concurrency and idempotent retries.
 - Authenticated imports preserving stable IDs, historical snapshots, source aliases and every saved decision.
+- The Swedish location handbook at `/handbook/`, with chapter navigation and the same sign-in as the property collection.
 
 The purchase target is €200,000. €200,000–€225,000 may be considered for a strong fit; €225,000–€250,000 needs an unusually strong case. Homes above €250,000 have no active rank. The latest Master Profile supersedes the older site's over-ceiling exception control; this application does not provide that obsolete exception. Existing fit scores are preserved, not recalculated by migration. A rank does not establish affordability, planning permission or current availability.
 
@@ -23,7 +24,7 @@ Node.js 24, Express and PostgreSQL, on Render in Frankfurt. `render.yaml` provis
 4. Build: `npm ci --omit=dev`. Start: `npm start`. Health check: `/api/health`.
 5. Import the private migration bundle using `scripts/import.mjs`.
 
-No personal dossiers, photos, comments, source snapshots, database credentials or login passwords belong in this public repository. Public assets contain only the app shell. All property data and images require authentication.
+No personal dossiers, handbook content, photos, comments, source snapshots, database credentials or login passwords belong in this public repository. Public assets contain only the app shell. All property data, handbook pages, styles and images require authentication.
 
 The development database expires on **26 October 2026**. Arrange a durable database plan or migration before then. No paid upgrade is performed by this application.
 
