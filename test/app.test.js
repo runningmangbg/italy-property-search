@@ -134,3 +134,33 @@ test('incomplete photo refreshes preserve the displayed gallery, stored media an
   await send('photos-replaced',{photos:replacement});
   assert.deepEqual((await bob.get('/api/properties/DL001')).body.property.photos,replacement);
 });
+
+test('stored and incoming spreadsheet dossiers open without changing decisions or source history',async()=>{
+  const dossier=[{'Assessment topic':'Listing facts','Evidence class':'CONFIRMED FACT','Assessment and next verification':'Two independently accessed homes.',Source:'https://example.com/listing'}, {'Assessment topic':'Pool','Assessment and next verification':'Permission must be checked.'}];
+  // Reproduce a record saved by the original importer, before normalization existed.
+  await db.query("UPDATE properties SET data=data || $1::jsonb WHERE id='DL001'",[JSON.stringify({dossier})]);
+  const read=async()=>(await bob.get('/api/properties/DL001').expect(200)).body;
+  const before=await read();
+  assert.equal(before.property.dossier[0].topic,'Listing facts');
+  assert.equal(before.property.dossier[0].text,'Two independently accessed homes.');
+  assert.equal(before.property.dossier[0].source,'https://example.com/listing');
+  assert.equal(before.property.dossier[1].evidence,'UNKNOWN/NEEDS VERIFICATION');
+  const stored=async()=>(await db.query("SELECT data FROM properties WHERE id='DL001'")).rows[0].data;
+  assert.deepEqual((await stored()).dossier,dossier); // Reading leaves source records untouched.
+  const property={id:'DL001',name:'Mountain home',region:'Dolomiti',province:'Belluno',price:190000,score:70,dossier};
+  const payload={sourceRevision:'spreadsheet-dossier',observedAt:'2026-09-27T18:00:00Z',properties:[property]};
+  const send=body=>request(app).post('/api/import').set('Authorization',`Bearer ${secret}`).send(body).expect(200);
+  await send(payload);
+  assert.equal((await stored()).dossier[0].evidence,'CONFIRMED FACT');
+  assert.equal((await send(payload)).body.repeated,true);
+  const {dossier: omitted,...sparse}=property;
+  await send({...payload,sourceRevision:'sparse-dossier-refresh',properties:[sparse]});
+  const after=await read();
+  assert.deepEqual(after.property.dossier,before.property.dossier);
+  assert.deepEqual(after.property.photos,before.property.photos);
+  assert.deepEqual(after.property.sources,before.property.sources);
+  assert.deepEqual(after.events,before.events);
+  assert.equal(after.property.status,'Closed');
+  assert.equal(after.property.revision,before.property.revision);
+  assert.ok(after.snapshots.some(s=>s.source_revision==='dolomiti-first'));
+});

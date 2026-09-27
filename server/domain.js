@@ -1,6 +1,21 @@
 import { createHash } from 'node:crypto';
 export const digest = value => createHash('sha256').update(typeof value === 'string' || Buffer.isBuffer(value) ? value : JSON.stringify(value)).digest('hex');
 
+export function normalizeDossier(dossier) {
+  if (!Array.isArray(dossier)) return [];
+  return dossier.map(value => {
+    const row = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+    const field = (key, legacy, fallback = '') => [row[key], row[legacy]].find(v => typeof v === 'string' && v.trim()) ?? fallback;
+    return {
+      ...row,
+      topic: field('topic', 'Assessment topic', 'Assessment'),
+      evidence: field('evidence', 'Evidence class', 'UNKNOWN/NEEDS VERIFICATION'),
+      text: field('text', 'Assessment and next verification', typeof value === 'string' ? value : ''),
+      source: field('source', 'Source'),
+    };
+  });
+}
+
 export function budget(property, decision = {}) {
   const price = property.price;
   const known = Number.isFinite(price) && price > 0;
@@ -19,7 +34,8 @@ export function budget(property, decision = {}) {
 }
 
 export function rank(rows) {
-  const properties = rows.map(r => ({ ...r.data, status: r.status || 'Open', favourite: r.favourite || false, revision: r.revision || 0, commentCount: Number(r.comment_count || 0), importedAt: r.imported_at, rejectionReferenceIds: r.rejection_reference_ids || [], jointlyRejected: !!r.rejection_reference_ids?.length, ...budget(r.data, r), rank: null }));
+  // Adapt stored spreadsheet rows too, so older imports open without rewriting history.
+  const properties = rows.map(r => ({ ...r.data, dossier: normalizeDossier(r.data.dossier), status: r.status || 'Open', favourite: r.favourite || false, revision: r.revision || 0, commentCount: Number(r.comment_count || 0), importedAt: r.imported_at, rejectionReferenceIds: r.rejection_reference_ids || [], jointlyRejected: !!r.rejection_reference_ids?.length, ...budget(r.data, r), rank: null }));
   properties.sort((a, b) => (b.score ?? -1) - (a.score ?? -1) || (b.components?.['Owner privacy /15'] ?? 0) - (a.components?.['Owner privacy /15'] ?? 0) || (b.components?.['B&B /14'] ?? 0) - (a.components?.['B&B /14'] ?? 0) || (a.price ?? Infinity) - (b.price ?? Infinity) || a.id.localeCompare(b.id));
   let position = 0;
   for (const p of properties) if (p.pool === 'ranked') p.rank = ++position;
@@ -56,6 +72,7 @@ export async function importProperties(db, payload) {
       const current = await tx.query('SELECT data, content_hash FROM properties WHERE id=$1 FOR UPDATE', [incoming.id]);
       // Sparse refreshes may not erase previously retained facts, source aliases, or history.
       const p = { ...(current.rows[0]?.data || {}), ...incoming };
+      if (p.dossier !== undefined) p.dossier = normalizeDossier(p.dossier);
       // A failed image fetch is not evidence that previously saved photos vanished.
       // Keep their metadata aligned with the durable media bytes on sparse refreshes.
       if ((!Array.isArray(incoming.photos) || incoming.photos.length === 0) && current.rows[0]?.data.photos?.length) {
