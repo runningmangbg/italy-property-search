@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { allProperties, digest, importProperties } from './domain.js';
 import { token, passwordMatches, sameSecret, hashPassword } from './auth.js';
 import { installHandbook } from './handbook.js';
+import { installReferences } from './references.js';
 
 const root = path.dirname(fileURLToPath(new URL('../package.json', import.meta.url)));
 const pid = z.string().regex(/^(AB|MR)\d{3,6}$/);
@@ -19,7 +20,7 @@ export function createApp({ db, users = [], importToken = '', production = false
   const app = express();
   app.disable('x-powered-by');
   app.set('trust proxy', 1);
-  app.use(helmet({ contentSecurityPolicy: { directives: { defaultSrc: ["'self'"], scriptSrc: ["'self'"], styleSrc: ["'self'"], imgSrc: ["'self'", 'data:'], connectSrc: ["'self'"], objectSrc: ["'none'"], baseUri: ["'self'"], formAction: ["'self'"], frameAncestors: ["'none'"], upgradeInsecureRequests: production ? [] : null } }, crossOriginEmbedderPolicy: false, strictTransportSecurity: production ? undefined : false }));
+  app.use(helmet({ contentSecurityPolicy: { directives: { defaultSrc: ["'self'"], scriptSrc: ["'self'"], styleSrc: ["'self'"], imgSrc: ["'self'", 'data:', 'https://img1.idealista.it', 'https://img2.idealista.it', 'https://img3.idealista.it', 'https://img4.idealista.it'], connectSrc: ["'self'"], objectSrc: ["'none'"], baseUri: ["'self'"], formAction: ["'self'"], frameAncestors: ["'none'"], upgradeInsecureRequests: production ? [] : null } }, crossOriginEmbedderPolicy: false, strictTransportSecurity: production ? undefined : false }));
   app.use((req, res, next) => { res.set('X-Robots-Tag', 'noindex, nofollow'); next(); });
   app.use(['/api', '/handbook'], (req, res, next) => { res.set('Cache-Control', 'private, no-store'); next(); });
   app.get('/api/health', async (req, res) => {
@@ -121,15 +122,17 @@ export function createApp({ db, users = [], importToken = '', production = false
   });
   app.get('/api/export', importer, async (req, res) => {
     const result = {};
-    for (const table of ['properties', 'decisions', 'feedback_events', 'property_snapshots', 'project_meta', 'import_runs', 'handbook_files']) result[table] = (await db.query(`SELECT * FROM ${table}`)).rows;
+    for (const table of ['properties', 'decisions', 'feedback_events', 'property_snapshots', 'project_meta', 'import_runs', 'handbook_files', 'reference_homes', 'reference_notes']) result[table] = (await db.query(`SELECT * FROM ${table}`)).rows;
     result.exportedAt = new Date().toISOString();
     res.json(result);
   });
   app.get('/api/feedback-export', importer, async (req, res) => res.json({ decisions: (await db.query('SELECT * FROM decisions ORDER BY property_id')).rows, events: (await db.query('SELECT * FROM feedback_events ORDER BY id')).rows }));
   installHandbook(app, { db, importer });
+  installReferences(app, { db, session, csrf, importer });
   app.use('/api', (req, res) => res.status(404).json({ error: 'Endpoint not found.' }));
   app.use(express.static(path.join(root, 'public'), { dotfiles: 'deny', maxAge: 0 }));
   app.get(/^\/(?:properties\/(?:AB|MR)\d+|(?:AB|MR)\d+\.html)$/, (req, res) => res.sendFile(path.join(root, 'public/index.html')));
+  app.get(/^\/references(?:\/\d{5,12})?\/?$/, (req, res) => res.sendFile(path.join(root, 'public/index.html')));
   app.use((error, req, res, next) => {
     if (res.headersSent) return next(error);
     const status = error.status || (error.type === 'entity.too.large' ? 413 : 500);

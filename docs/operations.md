@@ -26,6 +26,8 @@ Use `Authorization: Bearer <IMPORT_TOKEN>` over HTTPS:
 | `GET /api/export` | Facts, snapshots, feedback, metadata and import ledger; no credentials |
 | `GET /api/import/handbook` | Current handbook edition metadata, or null before the first import |
 | `POST /api/import/handbook` | Atomic complete-book import with source revision and expected current revision |
+| `GET /api/import/references` | Current shared-list snapshot metadata |
+| `POST /api/import/references` | Complete reference collection; guarded by `expectedRevision`, preserving notes |
 
 Photos are stored in `media`. Use a PostgreSQL backup for a complete restore; the JSON export does not contain photo bytes. Preserve the original source media.
 
@@ -58,4 +60,16 @@ Closed and On hold remain excluded after price changes. Comments guide preferenc
 
 The development database expires on 26 October 2026. Upgrade or migrate before then, preserving new feedback. No paid plan is enabled automatically. Free web services may have cold starts. Monitor `/api/health` and Render logs without logging credentials or private comments.
 
-The service sends no email, contacts no agents and creates no recurring job. Scheduled integration is a separate cutover step; verify it before claiming unattended synchronization.
+The service itself sends no email and contacts no agents. A separately authorized scheduled assistant workflow can refresh references and send screening results through the user's connected email account.
+
+## Shared-list references
+
+`/references` and `/references/<Idealista-ID>` open the separate reference collection. All source data, list invitation URLs and notes are session-protected API responses, held in PostgreSQL. Never commit a private import manifest, source snapshot or invitation token. Source listing images use validated Idealista image URLs and no-referrer requests, with a fallback when unavailable. Image availability is not guaranteed.
+
+Read `server/references.js` for the exact validated import shape. A complete manifest has `sourceRevision`, `expectedRevision`, `observedAt`, `listName`, `sourceUrl` and `homes`. Every home has its stable Idealista ID, canonical URL, name, observed price, region/province, position, scoped area/land text, optional validated photo, verified dossier `matches`, `matchNote`, optional `duplicateOf` and an `assessment`. An assessment contains `verdict` (`outside-brief`, `concern`, `potential`, `needs-review`), summary, advertised positives, verification questions and evidence basis (`Listing detail` or `Shared list`). Review labels are screening judgments, not technical or legal approvals. Existing owner notes are append-only and are never imported from a source snapshot.
+
+Run `scripts/import-references.mjs SITE PRIVATE_MANIFEST` with `IMPORT_TOKEN` in the environment. It reads the current revision first. A reused revision with different content or a stale expected revision fails. A source listing absent from the complete import becomes `listed=false`; its last assessment and notes remain. Do not import a partial crawl as a complete list. Count unique listing IDs across every observed pagination link and reconcile that count with the source's displayed count. An inaccessible detail page can retain its prior assessment with the true prior evidence date; never claim a fresh detailed review without reading it. For a changed collection, use a new revision and actual observation date.
+
+`GET /api/export` includes `reference_homes`, `reference_notes` and the `idealistaReferences` metadata. Read these and the ordinary property decisions before screening, so feedback and known aliases guide judgment. A new URL is not necessarily a new physical property. Preserve verified matches, flag conflicting prices/area and never choose a cheaper unsupported alias. A saved reference does not change the purchase ceiling or geography, and it does not automatically enter the ranked collection.
+
+For user-authorized screening email, separate evidenced conflicts from unresolved feasibility concerns. Each flagged home needs a clear explanation and canonical listing link; never remove favourites on the user's behalf. Read the current Master Profile each run. Price, missing information and renovation potential are separate questions: do not reject solely because current room count is below the future goal or because a permission is unknown. Compare against the previous export and sent screening email to identify new and changed issues, and disclose access failures rather than interpreting them as a clean screening.

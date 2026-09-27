@@ -15,22 +15,23 @@ async function api(path, options = {}) {
   return data;
 }
 function header() {
-  account.innerHTML = state.user ? `<div class="account"><a class="handbook-link" href="/handbook/" lang="sv">Handboken</a><span class="name">${esc(state.user.name)}</span><button id="logout">Sign out</button></div>` : '';
+  account.innerHTML = state.user ? `<div class="account"><a class="handbook-link" href="/references" data-reference-list>Idealista</a><a class="handbook-link" href="/handbook/" lang="sv">Handboken</a><span class="name">${esc(state.user.name)}</span><button id="logout">Sign out</button></div>` : '';
 }
 function login(error = '') {
   state.user = null; header();
   main.innerHTML = `<section class="login"><div class="eyebrow">Peter & Rebecka’s collection</div><h1>Welcome home.</h1><p class="muted">Sign in to explore the houses and share your thoughts.</p><form id="login"><label>Your name<input name="username" autocomplete="username" required placeholder="Peter or Rebecka"></label><label>Password<input type="password" name="password" autocomplete="current-password" required></label><div id="login-error" class="${error ? 'error' : ''}" role="alert">${esc(error)}</div><button class="btn" type="submit">Open the collection</button></form></section>`;
 }
 async function refresh() { const data = await api('/api/properties'); state.properties = data.properties; state.meta = data.meta; }
-function poolTitle(tab) { return ({ ranked: 'Ranked homes', watch: 'Price watch', favourites: 'Favourites', hold: 'On hold', closed: 'Closed', all: 'All assessed', weekly: 'Search updates', compare: 'Compare homes', profile: 'Our search brief' })[tab]; }
+function poolTitle(tab) { return ({ references: 'Idealista finds', ranked: 'Ranked homes', watch: 'Price watch', favourites: 'Favourites', hold: 'On hold', closed: 'Closed', all: 'All assessed', weekly: 'Search updates', compare: 'Compare homes', profile: 'Our search brief' })[tab]; }
 function counts() {
-  const c = { ranked: 0, watch: 0, favourites: 0, hold: 0, closed: 0, all: state.properties.length };
+  const c = { references: state.meta.idealistaReferences?.count || 0, ranked: 0, watch: 0, favourites: 0, hold: 0, closed: 0, all: state.properties.length };
   for (const p of state.properties) { if (c[p.pool] !== undefined) c[p.pool]++; if (p.favourite) c.favourites++; }
   return c;
 }
 function collection() {
+  if (state.tab === 'references') return showReferences();
   const c = counts();
-  const tabs = ['ranked', 'watch', 'favourites', 'hold', 'closed', 'all', 'weekly'];
+  const tabs = ['ranked', 'references', 'watch', 'favourites', 'hold', 'closed', 'all', 'weekly'];
   const provinces = [...new Set(state.properties.filter(p => !state.region || p.region === state.region).map(p => p.province))].sort();
   main.innerHTML = `<div class="heading"><div><div class="eyebrow">Abruzzo & Marche</div><h1>Finding our place in Italy.</h1><p class="muted">${c.all} assessed homes · ${c.ranked} ranked · ${c.watch} on price watch</p></div><div class="budget-note"><strong>Purchase target ${euros(200000)}</strong><br>Up to ${euros(225000)} for a strong fit. ${euros(225000)}–${euros(250000)} needs an exceptional case.<br><button class="link-button" data-tab="profile">Our full search brief</button></div></div>
   <nav class="nav" aria-label="Property views">${tabs.map(t => `<button data-tab="${t}" class="${state.tab === t ? 'active' : ''}" aria-current="${state.tab === t ? 'page' : 'false'}">${poolTitle(t)}${c[t] !== undefined ? `<span class="count">${c[t]}</span>` : ''}</button>`).join('')}</nav>
@@ -98,15 +99,15 @@ function detail(draft = '') {
   <aside class="sticky"><section class="panel feedback"><h2>Our decision</h2><p class="small muted">Shared by Peter and Rebecka. Closing keeps the dossier and history.</p><form id="feedback"><label>Status<select name="status">${['Open', 'Interested', 'On hold', 'Closed'].map(s => `<option${s === p.status ? ' selected' : ''}>${s}</option>`).join('')}</select></label><label class="check-label"><input type="checkbox" name="favourite" ${p.favourite ? 'checked' : ''}>Keep in favourites</label><label>Your comment<textarea name="comment" maxlength="8000" placeholder="What do we think? What should we ask or check?">${esc(draft)}</textarea></label><div id="feedback-error" role="alert"></div><button class="btn" type="submit">Save our decision</button></form><p class="small muted">Saved as ${esc(state.user.name)}. A price change never reopens a closed or held home.</p></section><section class="panel"><h2>Conversation & history</h2><div id="history">${eventsHtml(events)}</div>${nextBefore ? `<button class="link-button" id="more-history" data-before="${nextBefore}">Earlier history</button>` : ''}</section><section class="panel"><h3>Explore the listing</h3>${link(p.source, 'Open primary listing')}<p class="small muted">${p.driveUrl ? link(p.driveUrl, 'Original Drive dossier') : ''}</p></section></aside></div>`;
 }
 function eventsHtml(events) { return events.length ? events.map(e => `<article class="history"><strong>${esc(e.actor_name)}</strong><br><small>${date(e.created_at)} · ${esc(e.status)}${e.favourite ? ' · Favourite' : ''}</small>${e.comment ? `<p>${esc(e.comment)}</p>` : ''}</article>`).join('') : '<p class="small muted">No comments yet. Start the conversation above.</p>'; }
-function navigate(id) { history.pushState({}, '', id ? `/properties/${id}` : '/'); if (id) showProperty(id); else collection(); window.scrollTo({ top: 0 }); }
+function navigate(id) { if (!id && state.tab === 'references') state.tab = 'ranked'; history.pushState({}, '', id ? `/properties/${id}` : '/'); if (id) showProperty(id); else collection(); window.scrollTo({ top: 0 }); }
 document.addEventListener('click', async event => {
   const target = event.target.closest('a,button'); if (!target) return;
   if (target.dataset.property) { event.preventDefault(); navigate(target.dataset.property); }
   else if (target.id === 'back' || target.classList.contains('brand')) { event.preventDefault(); await refresh().catch(() => {}); navigate(); }
-  else if (target.dataset.tab) { state.tab = target.dataset.tab; state.page = 1; collection(); }
+  else if (target.dataset.tab) { state.tab = target.dataset.tab; state.page = 1; if (state.tab === 'references') navigateReference(); else { history.pushState({}, '', '/'); collection(); } }
   else if (target.dataset.page) { state.page = Number(target.dataset.page); renderCards(); document.querySelector('.filters').scrollIntoView({ block: 'start' }); }
   else if (target.id === 'clear-filters') { Object.assign(state, { search: '', region: '', province: '', sort: 'rank', page: 1 }); collection(); }
-  else if (target.id === 'logout') { try { await api('/api/logout', { method: 'POST' }); state.properties = []; state.meta = {}; login(); } catch (e) { toast(e.message); } }
+  else if (target.id === 'logout') { try { await api('/api/logout', { method: 'POST' }); state.properties = []; state.meta = {}; state.detail = null; Object.assign(referenceState, { homes: [], meta: null, detail: null }); login(); } catch (e) { toast(e.message); } }
   else if (target.dataset.photo !== undefined) { const n = Number(target.dataset.photo), p = state.detail.property, dialog = document.querySelector('#lightbox'); dialog.querySelector('img').src = `/api/media/${p.id}/${n}`; dialog.querySelector('img').alt = p.photos[n].caption; dialog.querySelector('p').textContent = p.photos[n].caption; dialog.showModal(); }
   else if (target.classList.contains('lightbox-close')) document.querySelector('#lightbox').close();
   else if (target.id === 'more-history') { try { const d = await api(`/api/properties/${state.detail.property.id}?before=${target.dataset.before}`); document.querySelector('#history').insertAdjacentHTML('beforeend', eventsHtml(d.events)); if (d.nextBefore) target.dataset.before = d.nextBefore; else target.remove(); } catch (e) { toast(e.message); } }
@@ -118,7 +119,7 @@ document.addEventListener('change', event => {
   if (t.dataset.compare) { const id = t.dataset.compare; if (t.checked && state.compare.size === 3) { t.checked = false; return toast('Choose up to three homes to compare.'); } t.checked ? state.compare.add(id) : state.compare.delete(id); const btn = document.querySelector('[data-tab="compare"]'); if (btn) btn.textContent = `Compare selected (${state.compare.size}/3)`; }
 });
 document.addEventListener('submit', async event => {
-  event.preventDefault(); const form = event.target, button = form.querySelector('button[type="submit"]'); if (!button) return;
+  event.preventDefault(); const form = event.target, button = form.querySelector('button[type="submit"]'); if (!button || !['login', 'feedback'].includes(form.id)) return;
   button.disabled = true;
   if (form.id === 'login') {
     try { const data = await api('/api/login', { method: 'POST', body: JSON.stringify(Object.fromEntries(new FormData(form))) }); state.user = data.user; state.csrf = data.csrf; header(); await refresh(); route(); }
@@ -141,6 +142,9 @@ function route() {
   if (next && state.user) {
     try { const destination = new URL(next, location.origin); if (destination.origin === location.origin && /^\/handbook(?:\/|$)/.test(destination.pathname)) { location.assign(destination.href); return; } } catch {}
   }
+  const reference = /^\/references(?:\/(\d{5,12}))?\/?$/.exec(location.pathname);
+  if (reference) return reference[1] ? showReference(reference[1]) : showReferences();
+  if (state.tab === 'references') state.tab = 'ranked';
   const match = /^\/(?:properties\/)?((?:AB|MR)\d+)(?:\.html)?$/.exec(location.pathname); match ? showProperty(match[1]) : collection();
 }
 window.addEventListener('popstate', route);

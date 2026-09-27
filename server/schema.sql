@@ -66,3 +66,19 @@ CREATE TABLE IF NOT EXISTS handbook_files (
   content text NOT NULL,
   content_hash text NOT NULL
 );
+CREATE TABLE IF NOT EXISTS reference_homes (
+  id text PRIMARY KEY,
+  data jsonb NOT NULL,
+  listed boolean NOT NULL DEFAULT true,
+  imported_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS reference_notes (
+  id bigserial PRIMARY KEY,
+  request_id uuid NOT NULL UNIQUE,
+  reference_id text NOT NULL REFERENCES reference_homes(id),
+  comment text NOT NULL,
+  actor_id text NOT NULL,
+  actor_name text NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS reference_notes_history ON reference_notes(reference_id,id DESC);

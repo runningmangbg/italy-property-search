@@ -10,7 +10,7 @@
     "start": "node server/index.js",
     "dev": "node --env-file=.env server/index.js",
     "test": "node --test test/*.test.js",
-    "check": "node --check server/index.js && node --check server/app.js && node --check public/app.js"
+    "check": "node --check server/index.js && node --check server/app.js && node --check public/app.js && node --check server/references.js && node --check public/references.js"
   },
   "dependencies": {
     "express": "^5.2.1",
