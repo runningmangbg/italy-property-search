@@ -1,0 +1,22 @@
+services:
+  - type: web
+    name: italy-property-search
+    runtime: node
+    region: frankfurt
+    plan: free
+    branch: main
+    buildCommand: npm ci --omit=dev
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NODE_VERSION
+        value: 24
+      - key: DATABASE_URL
+        sync: false
+      - key: APP_USERS
+        sync: false
+      - key: IMPORT_TOKEN
+        sync: false
+# Reuse the existing database. This Blueprint deliberately provisions no new DB.
