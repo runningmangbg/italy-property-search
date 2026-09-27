@@ -63,7 +63,8 @@ export async function importProperties(db, payload) {
         ON CONFLICT DO NOTHING`, [p.id, payload.sourceRevision, payload.observedAt, JSON.stringify(p), contentHash]);
       imported++;
     }
-    for (const [key, value] of Object.entries(payload.meta || {})) await tx.query(`INSERT INTO project_meta(key,value) VALUES($1,$2)
+    // Reference snapshots have their own revision guard; a concurrent register refresh cannot roll them back.
+    for (const [key, value] of Object.entries(payload.meta || {}).filter(([key]) => key !== 'idealistaReferences')) await tx.query(`INSERT INTO project_meta(key,value) VALUES($1,$2)
       ON CONFLICT(key) DO UPDATE SET value=EXCLUDED.value,updated_at=now()`, [key, JSON.stringify(value)]);
     await tx.query('INSERT INTO import_runs(source_revision,property_count,manifest_hash) VALUES($1,$2,$3)', [payload.sourceRevision, payload.properties.length, hash]);
     // Deliberately never update decisions, events, or delete absent properties.

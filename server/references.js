@@ -9,6 +9,7 @@ const homeSchema = z.object({
   id: referenceId, name: z.string().min(1).max(500), url: listingUrl,
   price: z.number().positive().nullable(), region: z.string().max(80), province: z.string().max(80),
   position: z.number().int().nonnegative(), area: z.string().max(300), land: z.string().max(500),
+  checkedAt: z.iso.datetime({ offset: true }).optional(),
   photo: z.object({ url: z.url().refine(v => /^https:\/\/img[1-4]\.idealista\.it\/.*image\.master\//.test(v)), alt: z.string().max(500) }).nullable(),
   matches: z.array(z.string().regex(/^(AB|MR)\d{3,6}$/)).max(10),
   matchNote: text.default(''), duplicateOf: referenceId.nullable().default(null),
@@ -71,7 +72,7 @@ export function installReferences(app, { db, session, csrf, importer }) {
       if (input.homes.some(h => h.matches.some(id => !known.has(id)))) throw Object.assign(new Error('A linked dossier does not exist.'), { status: 400 });
       // Refresh source observations without touching either collection's personal decisions or notes.
       await tx.query('UPDATE reference_homes SET listed=false');
-      for (const h of input.homes) await tx.query('INSERT INTO reference_homes(id,data,listed) VALUES($1,$2,true) ON CONFLICT(id) DO UPDATE SET data=EXCLUDED.data,listed=true,imported_at=now()', [h.id, JSON.stringify(h)]);
+      for (const h of input.homes) await tx.query('INSERT INTO reference_homes(id,data,listed) VALUES($1,$2,true) ON CONFLICT(id) DO UPDATE SET data=EXCLUDED.data,listed=true,imported_at=now()', [h.id, JSON.stringify({ ...h, checkedAt: h.checkedAt || input.observedAt })]);
       const meta = { sourceRevision: input.sourceRevision, observedAt: input.observedAt, listName: input.listName, sourceUrl: input.sourceUrl, count: input.homes.length, contentHash: hash, importedAt: new Date().toISOString() };
       await tx.query("UPDATE project_meta SET value=$1,updated_at=now() WHERE key='idealistaReferences'", [JSON.stringify(meta)]);
       return { ...meta, repeated: false };

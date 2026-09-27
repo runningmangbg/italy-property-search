@@ -45,7 +45,7 @@ test('notes are shared, CSRF protected and idempotent; source refresh preserves 
   assert.equal((await bob.get('/api/references/12345678')).body.notes.length, 1);
   await post({ ...bundle, sourceRevision:'r2', expectedRevision:'r1', homes:[{...home, price:180000}] }).expect(200);
   const d = (await bob.get('/api/references/12345678')).body;
-  assert.equal(d.home.price,180000); assert.equal(d.notes[0].comment,note.comment);
+  assert.equal(d.home.checkedAt, bundle.observedAt); assert.equal(d.home.price,180000); assert.equal(d.notes[0].comment,note.comment);
   assert.equal((await pg.query("SELECT status FROM decisions WHERE property_id='MR001'")).rows[0].status,'Closed');
   assert.equal((await pg.query("SELECT content_hash FROM properties WHERE id='MR001'")).rows[0].content_hash,'unchanged');
 });
@@ -63,4 +63,8 @@ test('stale, malformed and conflicting imports are rejected; absent listings kee
   assert.equal(old.home.listed,false); assert.equal(old.notes.length,1);
   const exported = (await request(app).get('/api/export').set('Authorization',`Bearer ${secret}`)).body;
   assert.equal(exported.reference_homes.length,2); assert.equal(exported.reference_notes.length,1);
+  const property = exported.properties[0].data;
+  await request(app).post('/api/import').set('Authorization',`Bearer ${secret}`).send({sourceRevision:'register-refresh',observedAt:bundle.observedAt,properties:[property],meta:{idealistaReferences:{sourceRevision:'stale'}}}).expect(200);
+  const after = (await bob.get('/api/references')).body;
+  assert.equal(after.meta.sourceRevision,'r3');
 });
