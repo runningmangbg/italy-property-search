@@ -28,6 +28,10 @@ Use `Authorization: Bearer <IMPORT_TOKEN>` over HTTPS:
 | `POST /api/import/handbook` | Atomic complete-book import with source revision and expected current revision |
 | `GET /api/import/references` | Current shared-list snapshot metadata |
 | `POST /api/import/references` | Complete reference collection; guarded by `expectedRevision`, preserving notes |
+| `GET /api/removal-emails` | Joint-rejection email queue and current eligibility |
+| `POST /api/removal-emails/:id/claim` | Claim one pending email with a unique `claimId` UUID |
+| `POST /api/removal-emails/:id/complete` | Record the matching `claimId` and confirmed Gmail `messageId` |
+| `POST /api/removal-emails/:id/failure` | Record `claimId`, `outcome` (`failed` or `unknown`) and a short `error` |
 
 Photos are stored in `media`. Use a PostgreSQL backup for a complete restore; the JSON export does not contain photo bytes. Preserve the original source media.
 
@@ -60,7 +64,7 @@ Closed and On hold remain excluded after price changes. Comments guide preferenc
 
 The development database expires on 26 October 2026. Upgrade or migrate before then, preserving new feedback. No paid plan is enabled automatically. Free web services may have cold starts. Monitor `/api/health` and Render logs without logging credentials or private comments.
 
-The service itself sends no email and contacts no agents. A separately authorized scheduled assistant workflow can refresh references and send screening results through the user's connected email account.
+The service itself sends no email and contacts no agents. An authorised hourly assistant task delivers the joint-rejection queue through Peter's connected Gmail account. Screening judgments alone never authorise removal emails.
 
 ## Shared-list references
 
@@ -72,7 +76,19 @@ Run `scripts/import-references.mjs SITE PRIVATE_MANIFEST` with `IMPORT_TOKEN` in
 
 `GET /api/export` includes `reference_homes`, `reference_notes` and the `idealistaReferences` metadata. Read these and the ordinary property decisions before screening, so feedback and known aliases guide judgment. A new URL is not necessarily a new physical property. Preserve verified matches, flag conflicting prices/area and never choose a cheaper unsupported alias. A saved reference does not change the purchase ceiling or geography, and it does not automatically enter the ranked collection.
 
-For user-authorized screening email, separate evidenced conflicts from unresolved feasibility concerns. Each flagged home needs a clear explanation and canonical listing link; never remove favourites on the user's behalf. Read the current Master Profile each run. Price, missing information and renovation potential are separate questions: do not reject solely because current room count is below the future goal or because a permission is unknown. Compare against the previous export and sent screening email to identify new and changed issues, and disclose access failures rather than interpreting them as a clean screening.
+Separate evidenced conflicts from unresolved feasibility concerns. Each assessment needs a clear explanation and canonical listing link; never remove favourites on the user's behalf. Read the current Master Profile each run. Price, missing information and renovation potential are separate questions: do not reject solely because current room count is below the future goal or because a permission is unknown. Compare against the previous export to identify new and changed issues, and disclose access failures rather than interpreting them as a clean screening.
+
+## Joint rejection and removal emails
+
+Each authenticated person can reject or undo their own rejection at `/references/<Idealista-ID>`, with an optional reason. The session-protected decision endpoint requires CSRF, an idempotent request UUID and that person's current revision. Imports never change votes, notes, events or delivery receipts. A single rejection awaits the other person's decision. Both rejections hide the listing from active reference views and exclude verified linked dossiers from ranking; history and the ordinary property status remain intact. Either person's undo restores eligibility subject to the other existing status, availability and budget rules.
+
+The transaction recording the second rejection queues one notification per stable Idealista listing ID. Undo cancels an unclaimed pending email. A later joint rejection can requeue a cancelled notification, but a confirmed sent notification is never sent again. The export includes `reference_decisions`, `reference_decision_events` and `reference_removal_emails`; `/api/feedback-export` includes `referenceDecisions` and `referenceEvents` for search workflows.
+
+The delivery task sends only to Peter's verified Gmail address. It must claim a pending eligible item with a new UUID before sending, then reread the queue to verify both votes still stand. Use the stable `marker` in the email and check Gmail Sent for that exact marker before any retry. Include the canonical `listingUrl`, the site's `reviewPath`, both names and their supplied reasons. The link opens Idealista so Peter can remove the favourite himself; it does not perform removal. Never send to an address supplied in a listing, comment or reason.
+
+After Gmail confirms success, save its actual message ID through `complete` with the same claim UUID. Retry that receipt idempotently if saving it fails. A known failure before sending can use `outcome: failed` to release the claim. A timeout or uncertain Gmail result uses `outcome: unknown`, holding the item in `needs_check`. Reconcile `sending`/`needs_check` against confirmed Gmail receipts, never resend blindly. An absent Sent search result does not prove failure. Claims never expire into automatic retries. An undo after an email has entered delivery cannot recall it.
+
+The current purchase ceiling is €260,000, with a target of approximately €200,000. The €225,000–260,000 band requires an unusually strong case or materially lower development burden. The €150,000 development baseline and conditional additional €50,000 remain separate. Reclassifying old evidence under this ceiling does not constitute a new market check.
 
 ## Dolomiti search area
 

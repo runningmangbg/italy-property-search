@@ -82,3 +82,34 @@ CREATE TABLE IF NOT EXISTS reference_notes (
   created_at timestamptz NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS reference_notes_history ON reference_notes(reference_id,id DESC);
+CREATE TABLE IF NOT EXISTS reference_decisions (
+  reference_id text NOT NULL REFERENCES reference_homes(id),
+  user_id text NOT NULL CHECK (user_id IN ('peter','rebecka')),
+  rejected boolean NOT NULL DEFAULT false,
+  reason text NOT NULL DEFAULT '',
+  revision integer NOT NULL DEFAULT 0,
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY(reference_id,user_id)
+);
+CREATE TABLE IF NOT EXISTS reference_decision_events (
+  id bigserial PRIMARY KEY,
+  request_id uuid NOT NULL UNIQUE,
+  reference_id text NOT NULL REFERENCES reference_homes(id),
+  user_id text NOT NULL,
+  rejected boolean NOT NULL,
+  reason text NOT NULL,
+  revision integer NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS reference_removal_emails (
+  id uuid PRIMARY KEY,
+  reference_id text NOT NULL UNIQUE REFERENCES reference_homes(id),
+  state text NOT NULL CHECK (state IN ('pending','sending','sent','cancelled','needs_check')),
+  claim_id uuid,
+  claimed_at timestamptz,
+  gmail_message_id text,
+  sent_at timestamptz,
+  last_error text NOT NULL DEFAULT '',
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);

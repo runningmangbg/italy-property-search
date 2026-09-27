@@ -122,11 +122,11 @@ export function createApp({ db, users = [], importToken = '', production = false
   });
   app.get('/api/export', importer, async (req, res) => {
     const result = {};
-    for (const table of ['properties', 'decisions', 'feedback_events', 'property_snapshots', 'project_meta', 'import_runs', 'handbook_files', 'reference_homes', 'reference_notes']) result[table] = (await db.query(`SELECT * FROM ${table}`)).rows;
+    for (const table of ['properties', 'decisions', 'feedback_events', 'property_snapshots', 'project_meta', 'import_runs', 'handbook_files', 'reference_homes', 'reference_notes', 'reference_decisions', 'reference_decision_events', 'reference_removal_emails']) result[table] = (await db.query(`SELECT * FROM ${table}`)).rows;
     result.exportedAt = new Date().toISOString();
     res.json(result);
   });
-  app.get('/api/feedback-export', importer, async (req, res) => res.json({ decisions: (await db.query('SELECT * FROM decisions ORDER BY property_id')).rows, events: (await db.query('SELECT * FROM feedback_events ORDER BY id')).rows }));
+  app.get('/api/feedback-export', importer, async (req, res) => res.json({ decisions: (await db.query('SELECT * FROM decisions ORDER BY property_id')).rows, events: (await db.query('SELECT * FROM feedback_events ORDER BY id')).rows, referenceDecisions: (await db.query('SELECT * FROM reference_decisions ORDER BY reference_id,user_id')).rows, referenceEvents: (await db.query('SELECT * FROM reference_decision_events ORDER BY id')).rows }));
   installHandbook(app, { db, importer });
   installReferences(app, { db, session, csrf, importer });
   app.use('/api', (req, res) => res.status(404).json({ error: 'Endpoint not found.' }));

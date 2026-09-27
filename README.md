@@ -12,7 +12,7 @@ A private collection for exploring and comparing homes in Abruzzo, Marche and th
 - Authenticated imports preserving stable IDs, historical snapshots, source aliases and every saved decision.
 - The Swedish location handbook at `/handbook/`, with chapter navigation and the same sign-in as the property collection.
 
-The purchase target is €200,000. €200,000–€225,000 may be considered for a strong fit; €225,000–€250,000 needs an unusually strong case. Homes above €250,000 have no active rank. The latest Master Profile supersedes the older site's over-ceiling exception control; this application does not provide that obsolete exception. Existing fit scores are preserved, not recalculated by migration. A rank does not establish affordability, planning permission or current availability.
+The purchase target is €200,000. €200,000–€225,000 may be considered for a strong fit; €225,000–€260,000 needs an unusually strong case. Homes above €260,000 have no active rank. The latest Master Profile supersedes the older site's over-ceiling exception control; this application does not provide that obsolete exception. Existing fit scores are preserved, not recalculated by migration. A rank does not establish affordability, planning permission or current availability.
 
 ## Deployment
 

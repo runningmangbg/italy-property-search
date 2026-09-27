@@ -23,7 +23,7 @@ try {
   for (const p of list.properties) {
     const original=manifest.properties.find(x=>x.id===p.id);
     assert.equal(p.score,original.score); assert.equal(p.price,original.price);
-    if(p.price>250000) assert.equal(p.rank,null);
+    if(p.price>260000) assert.equal(p.rank,null);
     const d=await (await fetch(origin+'/api/properties/'+p.id)).json();
     assert.equal(d.property.dossier.length,original.dossier.length); dossiers+=d.property.dossier.length;
   }

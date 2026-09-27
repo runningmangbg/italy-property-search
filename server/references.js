@@ -1,6 +1,7 @@
 import express from 'express';
 import { z } from 'zod';
 import { digest } from './domain.js';
+import { referenceReviews, installReferenceDecisions } from './reference-decisions.js';
 
 const referenceId = z.string().regex(/^\d{5,12}$/);
 const listingUrl = z.url().refine(v => /^https:\/\/www\.idealista\.it\/immobile\/\d{5,12}\/$/.test(v));
@@ -28,8 +29,10 @@ const importSchema = z.object({
 const noteSchema = z.object({ requestId: z.uuid(), comment: z.string().trim().min(1).max(8000) }).strict();
 
 export function installReferences(app, { db, session, csrf, importer }) {
+  installReferenceDecisions(app, { db, session, csrf, importer });
   app.get('/api/references', session, async (req, res) => {
-    const homes = (await db.query('SELECT data,listed FROM reference_homes ORDER BY (data->>\'position\')::integer,id')).rows.map(r => ({ ...r.data, listed: r.listed }));
+    const reviews = await referenceReviews(db);
+    const homes = (await db.query('SELECT data,listed FROM reference_homes ORDER BY (data->>\'position\')::integer,id')).rows.map(r => ({ ...r.data, listed: r.listed, review: reviews(r.data.id) }));
     const meta = (await db.query("SELECT value FROM project_meta WHERE key='idealistaReferences'")).rows[0]?.value || null;
     res.json({ homes, meta });
   });
@@ -39,7 +42,8 @@ export function installReferences(app, { db, session, csrf, importer }) {
     const before = req.query.before === undefined ? null : Number(req.query.before);
     if (before !== null && (!Number.isSafeInteger(before) || before < 1)) return res.status(400).json({ error: 'Invalid notes page.' });
     const notes = (await db.query(`SELECT id,comment,actor_name,created_at FROM reference_notes WHERE reference_id=$1 ${before ? 'AND id<$2' : ''} ORDER BY id DESC LIMIT 51`, before ? [req.params.id, before] : [req.params.id])).rows;
-    res.json({ home: { ...home.data, listed: home.listed }, notes: notes.slice(0, 50), nextBefore: notes.length > 50 ? notes[49].id : null });
+    const reviews = await referenceReviews(db);
+    res.json({ home: { ...home.data, listed: home.listed, review: reviews(home.data.id) }, notes: notes.slice(0, 50), nextBefore: notes.length > 50 ? notes[49].id : null });
   });
   app.post('/api/references/:id/notes', session, csrf, express.json({ limit: '64kb' }), async (req, res) => {
     const parsed = noteSchema.safeParse(req.body);
