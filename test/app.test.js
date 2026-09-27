@@ -71,3 +71,24 @@ test('media validates content and logout invalidates the server-side session',as
   await alice.post('/api/logout').set('X-CSRF-Token',csrfA).expect(200);
   await alice.get('/api/properties').expect(401);
 });
+
+test('Dolomiti dossiers support imports, photos, reference links, routes and preserved decisions',async()=>{
+  const property={id:'DL001',name:'Mountain home',region:'Dolomiti',province:'Belluno',administrativeRegion:'Veneto',price:200000,score:70};
+  const payload={sourceRevision:'dolomiti-first',observedAt:'2026-09-27T15:00:00Z',properties:[property]};
+  await request(app).post('/api/import').set('Authorization',`Bearer ${secret}`).send(payload).expect(200);
+  const detail=(await bob.get('/api/properties/DL001').expect(200)).body.property;
+  assert.equal(detail.region,'Dolomiti'); assert.equal(detail.administrativeRegion,'Veneto');
+  await bob.get('/properties/DL001').expect(200).expect('Content-Type',/html/);
+  await bob.get('/DL001.html').expect(200).expect('Content-Type',/html/);
+  const image=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=','base64');
+  await request(app).put('/api/import/media/DL001/0').set('Authorization',`Bearer ${secret}`).set('Content-Type','image/png').send(image).expect(200);
+  await bob.get('/api/media/DL001/0').expect(200).expect('Content-Type',/image\/png/);
+  await request(app).post('/api/import/references').set('Authorization',`Bearer ${secret}`).send({sourceRevision:'dolomiti-reference',expectedRevision:null,observedAt:payload.observedAt,listName:'Examples',sourceUrl:'https://www.idealista.it/fav-list/1?share=example',homes:[{id:'12345678',name:property.name,url:'https://www.idealista.it/immobile/12345678/',price:property.price,region:'Veneto',province:'Belluno',position:0,area:'Not verified',land:'Not verified',photo:null,matches:['DL001'],assessment:{verdict:'needs-review',summary:'Check owner access.',positives:[],questions:[],basis:'Listing detail'}}]}).expect(200);
+  assert.deepEqual((await bob.get('/api/references/12345678')).body.home.matches,['DL001']);
+  await bob.post('/api/properties/DL001/feedback').set('X-CSRF-Token',csrfB).send({requestId:randomUUID(),revision:0,status:'Closed',favourite:false,comment:'Access does not work for us.'}).expect(200);
+  await request(app).post('/api/import').set('Authorization',`Bearer ${secret}`).send({...payload,sourceRevision:'dolomiti-refresh',properties:[{...property,price:190000}]}).expect(200);
+  const refreshed=(await bob.get('/api/properties/DL001')).body;
+  assert.equal(refreshed.property.status,'Closed'); assert.equal(refreshed.property.rank,null);
+  assert.equal(refreshed.events[0].comment,'Access does not work for us.');
+  assert.equal((await bob.get('/api/properties')).body.properties.length,3);
+});

@@ -10,8 +10,8 @@ import { installHandbook } from './handbook.js';
 import { installReferences } from './references.js';
 
 const root = path.dirname(fileURLToPath(new URL('../package.json', import.meta.url)));
-const pid = z.string().regex(/^(AB|MR)\d{3,6}$/);
-const propertySchema = z.object({ id: pid, name: z.string().min(1).max(500), price: z.number().nonnegative().nullable(), score: z.number().min(0).max(100).nullable(), region: z.enum(['Abruzzo', 'Marche']), province: z.string().max(30) }).passthrough();
+const pid = z.string().regex(/^(AB|MR|DL)\d{3,6}$/);
+const propertySchema = z.object({ id: pid, name: z.string().min(1).max(500), price: z.number().nonnegative().nullable(), score: z.number().min(0).max(100).nullable(), region: z.enum(['Abruzzo', 'Marche', 'Dolomiti']), province: z.string().max(30) }).passthrough();
 const importSchema = z.object({ sourceRevision: z.string().min(1).max(200), observedAt: z.iso.datetime({ offset: true }), properties: z.array(propertySchema).min(1).max(3000), meta: z.record(z.string(), z.unknown()).optional() });
 const decisionSchema = z.object({ requestId: z.uuid(), revision: z.number().int().nonnegative(), status: z.enum(['Open', 'Interested', 'On hold', 'Closed']), favourite: z.boolean(), comment: z.string().max(8000).default('') }).strict();
 
@@ -131,7 +131,7 @@ export function createApp({ db, users = [], importToken = '', production = false
   installReferences(app, { db, session, csrf, importer });
   app.use('/api', (req, res) => res.status(404).json({ error: 'Endpoint not found.' }));
   app.use(express.static(path.join(root, 'public'), { dotfiles: 'deny', maxAge: 0 }));
-  app.get(/^\/(?:properties\/(?:AB|MR)\d+|(?:AB|MR)\d+\.html)$/, (req, res) => res.sendFile(path.join(root, 'public/index.html')));
+  app.get(/^\/(?:properties\/(?:AB|MR|DL)\d+|(?:AB|MR|DL)\d+\.html)$/, (req, res) => res.sendFile(path.join(root, 'public/index.html')));
   app.get(/^\/references(?:\/\d{5,12})?\/?$/, (req, res) => res.sendFile(path.join(root, 'public/index.html')));
   app.use((error, req, res, next) => {
     if (res.headersSent) return next(error);

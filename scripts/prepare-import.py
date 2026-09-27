@@ -31,7 +31,9 @@ for row in rows:
     obj = dict(old.get(identity, {}))
     for key, n in [('id',1),('tier',2),('name',3),('province',4),('price',5),('size',6),('land',7),('score',8),('allLow',9),('allHigh',10),('why',11),('risks',12),('owner',13),('bb',14),('source',15)]:
         obj[key] = row[n] if len(row)>n else None
-    obj['region'] = 'Abruzzo' if identity.startswith('AB') else 'Marche'
+    search_areas = {'AB': 'Abruzzo', 'MR': 'Marche', 'DL': 'Dolomiti'}
+    assert identity[:2] in search_areas, f'Unknown property ID prefix: {identity}'
+    obj['region'] = search_areas[identity[:2]]
     obj.pop('rank', None)
     obj['costs'] = costs[identity]
     obj['components'] = {k:v for k,v in scores[identity].items() if k not in ['Property ID','Property','Total /100','Reason']}

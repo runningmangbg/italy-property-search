@@ -1,6 +1,6 @@
 # Our Italian Home
 
-A private collection for exploring and comparing homes in Abruzzo and Marche, with a shared decision history for a future permanent home and small B&B.
+A private collection for exploring and comparing homes in Abruzzo, Marche and the Dolomiti area, with a shared decision history for a future permanent home and small B&B.
 
 ## Application
 

@@ -11,7 +11,7 @@ const homeSchema = z.object({
   position: z.number().int().nonnegative(), area: z.string().max(300), land: z.string().max(500),
   checkedAt: z.iso.datetime({ offset: true }).optional(),
   photo: z.object({ url: z.url().refine(v => /^https:\/\/img[1-4]\.idealista\.it\/.*image\.master\//.test(v)), alt: z.string().max(500) }).nullable(),
-  matches: z.array(z.string().regex(/^(AB|MR)\d{3,6}$/)).max(10),
+  matches: z.array(z.string().regex(/^(AB|MR|DL)\d{3,6}$/)).max(10),
   matchNote: text.default(''), duplicateOf: referenceId.nullable().default(null),
   assessment: z.object({
     verdict: z.enum(['outside-brief', 'concern', 'potential', 'needs-review']),
