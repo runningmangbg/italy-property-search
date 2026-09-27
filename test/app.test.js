@@ -6,6 +6,7 @@ import { readFile } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import { createApp } from '../server/app.js';
 import { hashPassword } from '../server/auth.js';
+import { budget } from '../server/domain.js';
 
 const secret = 'test-import-authorization-token-long-enough';
 let pg, db, app, alice, bob, csrfA, csrfB;
@@ -50,6 +51,13 @@ test('imports preserve IDs, watch separation, revisions, and shared decisions',a
   assert.equal(detail.snapshots.length,2); assert.equal(detail.property.price,175000);
   await bob.post('/api/properties/AB001/feedback').set('X-CSRF-Token',csrfB).send({requestId:randomUUID(),revision:1,status:'Open',favourite:true,comment:'Reopened together.'}).expect(200);
   assert.equal((await alice.get('/api/properties/AB001')).body.property.rank,1);
+});
+test('an explicit budget gate keeps an under-ceiling home in Price Watch',()=>{
+  const gated=budget({price:255000,budgetEligible:false});
+  const eligible=budget({price:255000,budgetEligible:true});
+  assert.equal(gated.pool,'watch');
+  assert.equal(gated.band,'Price watch — strong case not established');
+  assert.equal(eligible.pool,'ranked');
 });
 test('concurrent writers cannot overwrite each other and failed batches are atomic',async()=>{
   const body={revision:2,status:'On hold',favourite:true,comment:'Check the annex.'};

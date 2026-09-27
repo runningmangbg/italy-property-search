@@ -4,13 +4,14 @@ export const digest = value => createHash('sha256').update(typeof value === 'str
 export function budget(property, decision = {}) {
   const price = property.price;
   const known = Number.isFinite(price) && price > 0;
-  let pool = !known ? 'verify' : price > 260000 ? 'watch' : 'ranked';
+  const gatedFromRanking = known && price <= 260000 && property.budgetEligible === false;
+  let pool = !known ? 'verify' : price > 260000 || gatedFromRanking ? 'watch' : 'ranked';
   if (['On hold', 'Closed'].includes(decision.status)) pool = decision.status === 'Closed' ? 'closed' : 'hold';
   if (decision.rejection_reference_ids?.length) pool = 'closed';
   if (property.availability === 'withdrawn' || property.availability === 'sold') pool = 'inactive';
   return {
     pool,
-    band: !known ? 'Price unverified' : price <= 200000 ? 'Target budget' : price <= 225000 ? 'Above target' : price <= 260000 ? 'Stretch: strong case required' : 'Price watch',
+    band: !known ? 'Price unverified' : gatedFromRanking ? 'Price watch — strong case not established' : price <= 200000 ? 'Target budget' : price <= 225000 ? 'Above target' : price <= 260000 ? 'Stretch: strong case required' : 'Price watch',
     reductionToTarget: known ? Math.max(0, price - 200000) : null,
     reductionToCeiling: known ? Math.max(0, price - 260000) : null,
     requiresStrongCase: known && price > 225000 && price <= 260000,
