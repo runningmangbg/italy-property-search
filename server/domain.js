@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { collectionRows } from './collection.js';
 export const digest = value => createHash('sha256').update(typeof value === 'string' || Buffer.isBuffer(value) ? value : JSON.stringify(value)).digest('hex');
 
 export function normalizeDossier(dossier) {
@@ -21,9 +22,11 @@ export function budget(property, decision = {}) {
   const known = Number.isFinite(price) && price > 0;
   const gatedFromRanking = known && price <= 260000 && property.budgetEligible === false;
   let pool = !known ? 'verify' : price > 260000 || gatedFromRanking ? 'watch' : 'ranked';
-  if (['On hold', 'Closed'].includes(decision.status)) pool = decision.status === 'Closed' ? 'closed' : 'hold';
+  if (pool === 'ranked' && (property.evaluationPending || ('score' in property && !Number.isFinite(property.score)))) pool = 'verify';
+  const status = decision.effective_status || decision.status;
+  if (['On hold', 'Closed'].includes(status)) pool = status === 'Closed' ? 'closed' : 'hold';
   if (!['closed', 'hold'].includes(pool) && (decision.rejection_reference_ids?.length || decision.removed_reference_ids?.length)) pool = 'excluded';
-  if (property.availability === 'withdrawn' || property.availability === 'sold') pool = 'inactive';
+  if (['withdrawn', 'sold', 'removed', 'unavailable'].includes(property.availability)) pool = 'inactive';
   return {
     pool,
     band: !known ? 'Price unverified' : gatedFromRanking ? 'Price watch — strong case not established' : price <= 200000 ? 'Target budget' : price <= 225000 ? 'Above target' : price <= 260000 ? 'Stretch: strong case required' : 'Price watch',
@@ -35,23 +38,7 @@ export function budget(property, decision = {}) {
 
 export function rank(rows) {
   // Adapt stored spreadsheet rows too, so older imports open without rewriting history.
-  const properties = rows.map(r => ({
-    ...r.data,
-    dossier: normalizeDossier(r.data.dossier),
-    status: r.status || 'Open',
-    favourite: r.favourite || false,
-    revision: r.revision || 0,
-    commentCount: Number(r.comment_count || 0),
-    importedAt: r.imported_at,
-    rejectionReferenceIds: r.rejection_reference_ids || [],
-    removedReferenceIds: r.removed_reference_ids || [],
-    jointRejectionReferenceIds: r.joint_rejection_reference_ids || [],
-    referenceRejected: !!r.rejection_reference_ids?.length,
-    referenceRemoved: !!r.removed_reference_ids?.length,
-    jointlyRejected: !!r.joint_rejection_reference_ids?.length,
-    ...budget(r.data, r),
-    rank: null,
-  }));
+  const properties = rows.map(r => ({ ...r.data, dossier: normalizeDossier(r.data.dossier), status: r.status || 'Open', favourite: r.favourite || false, revision: r.revision || 0, commentCount: Number(r.comment_count || 0), importedAt: r.imported_at, rejectionReferenceIds: r.rejection_reference_ids || [], rejected: !!r.rejection_reference_ids?.length, referenceRejected: !!r.rejection_reference_ids?.length, referenceRemoved: !!r.removed_reference_ids?.length, jointRejectionReferenceIds: r.joint_rejection_reference_ids || [], jointlyRejected: !!r.joint_rejection_reference_ids?.length, removedFromSharedList: !!r.removed_reference_ids?.length, removedReferenceIds: r.removed_reference_ids || [], ...budget(r.data, r), rank: null }));
   properties.sort((a, b) => (b.score ?? -1) - (a.score ?? -1) || (b.components?.['Owner privacy /15'] ?? 0) - (a.components?.['Owner privacy /15'] ?? 0) || (b.components?.['B&B /14'] ?? 0) - (a.components?.['B&B /14'] ?? 0) || (a.price ?? Infinity) - (b.price ?? Infinity) || a.id.localeCompare(b.id));
   let position = 0;
   for (const p of properties) if (p.pool === 'ranked') p.rank = ++position;
@@ -59,19 +46,12 @@ export function rank(rows) {
 }
 
 export async function allProperties(db) {
-  const { rows } = await db.query(`SELECT p.*, d.status, d.favourite, d.revision,
-    (SELECT count(*) FROM feedback_events e WHERE e.property_id=p.id AND e.comment<>'') AS comment_count,
-    ARRAY(SELECT DISTINCT h.id FROM reference_homes h
-      JOIN reference_decisions r ON r.reference_id=h.id AND r.rejected
-      WHERE COALESCE(h.data->'matches','[]'::jsonb) ? p.id) AS rejection_reference_ids,
-    ARRAY(SELECT h.id FROM reference_homes h
-      JOIN reference_decisions a ON a.reference_id=h.id AND a.user_id='peter' AND a.rejected
-      JOIN reference_decisions b ON b.reference_id=h.id AND b.user_id='rebecka' AND b.rejected
-      WHERE COALESCE(h.data->'matches','[]'::jsonb) ? p.id) AS joint_rejection_reference_ids,
-    ARRAY(SELECT h.id FROM reference_homes h
-      WHERE NOT h.listed AND COALESCE(h.data->'matches','[]'::jsonb) ? p.id) AS removed_reference_ids
-    FROM properties p LEFT JOIN decisions d ON d.property_id=p.id`);
-  return rank(rows);
+  const properties = (await db.query(`SELECT p.*, d.status, d.favourite, d.revision,
+    (SELECT count(*) FROM feedback_events e WHERE e.property_id=p.id AND e.comment<>'') AS comment_count
+    FROM properties p LEFT JOIN decisions d ON d.property_id=p.id`)).rows;
+  const references = (await db.query('SELECT * FROM reference_homes')).rows;
+  const votes = (await db.query('SELECT * FROM reference_decisions')).rows;
+  return rank(collectionRows(properties, references, votes));
 }
 
 export async function importProperties(db, payload) {
@@ -120,3 +100,4 @@ export async function importProperties(db, payload) {
     return { imported, unchanged: payload.properties.length - imported, repeated: false };
   });
 }
+

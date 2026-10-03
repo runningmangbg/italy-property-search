@@ -10,8 +10,8 @@ import { installHandbook } from './handbook.js';
 import { installReferences } from './references.js';
 
 const root = path.dirname(fileURLToPath(new URL('../package.json', import.meta.url)));
-const pid = z.string().regex(/^(AB|MR|DL)\d{3,6}$/);
-const propertySchema = z.object({ id: pid, name: z.string().min(1).max(500), price: z.number().nonnegative().nullable(), score: z.number().min(0).max(100).nullable(), region: z.enum(['Abruzzo', 'Marche', 'Dolomiti']), province: z.string().max(30) }).passthrough();
+const pid = z.string().regex(/^(?:(?:AB|MR|DL)\d{3,6}|IL\d{5,12})$/);
+const propertySchema = z.object({ id: pid, name: z.string().min(1).max(500), price: z.number().nonnegative().nullable(), score: z.number().min(0).max(100).nullable(), region: z.string().min(1).max(80), province: z.string().max(80) }).passthrough().refine(p => p.id.startsWith('IL') || ['Abruzzo', 'Marche', 'Dolomiti'].includes(p.region), 'Use the established search area or an individually selected Idealista home.');
 const importSchema = z.object({ sourceRevision: z.string().min(1).max(200), observedAt: z.iso.datetime({ offset: true }), properties: z.array(propertySchema).max(3000), meta: z.record(z.string(), z.unknown()).optional() }).refine(p => p.properties.length > 0 || Object.keys(p.meta || {}).some(key => key !== 'idealistaReferences'), 'An import must contain properties or project metadata.');
 const decisionSchema = z.object({ requestId: z.uuid(), revision: z.number().int().nonnegative(), status: z.enum(['Open', 'Interested', 'On hold', 'Closed']), favourite: z.boolean(), comment: z.string().max(8000).default('') }).strict();
 
@@ -70,7 +70,7 @@ export function createApp({ db, users = [], importToken = '', production = false
     res.json({ properties, meta });
   });
   app.get('/api/properties/:id', session, async (req, res) => {
-    const property = (await allProperties(db)).find(p => p.id === req.params.id);
+    const property = (await allProperties(db)).find(p => p.id === req.params.id || p.aliasPropertyIds?.includes(req.params.id));
     if (!property) return res.status(404).json({ error: 'Property not found.' });
     const before = req.query.before === undefined ? null : Number(req.query.before);
     if (before !== null && (!Number.isSafeInteger(before) || before < 1)) return res.status(400).json({ error: 'Invalid history page.' });
@@ -122,16 +122,17 @@ export function createApp({ db, users = [], importToken = '', production = false
   });
   app.get('/api/export', importer, async (req, res) => {
     const result = {};
-    for (const table of ['properties', 'decisions', 'feedback_events', 'property_snapshots', 'project_meta', 'import_runs', 'handbook_files', 'reference_homes', 'reference_notes', 'reference_decisions', 'reference_decision_events', 'reference_removal_emails']) result[table] = (await db.query(`SELECT * FROM ${table}`)).rows;
+    for (const table of ['properties', 'decisions', 'feedback_events', 'property_snapshots', 'project_meta', 'import_runs', 'handbook_files', 'reference_homes', 'reference_notes', 'reference_decisions', 'reference_decision_events', 'reference_removal_emails', 'reference_membership_events']) result[table] = (await db.query(`SELECT * FROM ${table}`)).rows;
+    result.collection = await allProperties(db);
     result.exportedAt = new Date().toISOString();
     res.json(result);
   });
-  app.get('/api/feedback-export', importer, async (req, res) => res.json({ decisions: (await db.query('SELECT * FROM decisions ORDER BY property_id')).rows, events: (await db.query('SELECT * FROM feedback_events ORDER BY id')).rows, referenceDecisions: (await db.query('SELECT * FROM reference_decisions ORDER BY reference_id,user_id')).rows, referenceEvents: (await db.query('SELECT * FROM reference_decision_events ORDER BY id')).rows }));
+  app.get('/api/feedback-export', importer, async (req, res) => res.json({ decisions: (await db.query('SELECT * FROM decisions ORDER BY property_id')).rows, events: (await db.query('SELECT * FROM feedback_events ORDER BY id')).rows, referenceDecisions: (await db.query('SELECT * FROM reference_decisions ORDER BY reference_id,user_id')).rows, referenceEvents: (await db.query('SELECT * FROM reference_decision_events ORDER BY id')).rows, referenceNotes: (await db.query('SELECT * FROM reference_notes ORDER BY id')).rows }));
   installHandbook(app, { db, importer });
   installReferences(app, { db, session, csrf, importer });
   app.use('/api', (req, res) => res.status(404).json({ error: 'Endpoint not found.' }));
   app.use(express.static(path.join(root, 'public'), { dotfiles: 'deny', maxAge: 0 }));
-  app.get(/^\/(?:properties\/(?:AB|MR|DL)\d+|(?:AB|MR|DL)\d+\.html)$/, (req, res) => res.sendFile(path.join(root, 'public/index.html')));
+  app.get(/^\/(?:properties\/(?:AB|MR|DL|IL)\d+|(?:AB|MR|DL|IL)\d+\.html)$/, (req, res) => res.sendFile(path.join(root, 'public/index.html')));
   app.get(/^\/references(?:\/\d{5,12})?\/?$/, (req, res) => res.sendFile(path.join(root, 'public/index.html')));
   app.use((error, req, res, next) => {
     if (res.headersSent) return next(error);
@@ -141,3 +142,4 @@ export function createApp({ db, users = [], importToken = '', production = false
   });
   return app;
 }
+

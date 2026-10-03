@@ -107,3 +107,4 @@ test('a complete shared-list removal excludes a verified linked dossier and re-a
   assert.equal(p.referenceRemoved,false);
   assert.equal(p.rank,null); // Existing personal rejections still apply independently.
 });
+

@@ -32,8 +32,13 @@ for row in rows:
     for key, n in [('id',1),('tier',2),('name',3),('province',4),('price',5),('size',6),('land',7),('score',8),('allLow',9),('allHigh',10),('why',11),('risks',12),('owner',13),('bb',14),('source',15)]:
         obj[key] = row[n] if len(row)>n else None
     search_areas = {'AB': 'Abruzzo', 'MR': 'Marche', 'DL': 'Dolomiti'}
-    assert identity[:2] in search_areas, f'Unknown property ID prefix: {identity}'
-    obj['region'] = search_areas[identity[:2]]
+    if identity.startswith('IL') and identity[2:].isdigit():
+        geography = context.get('propertyGeography', {}).get(identity, {})
+        obj['region'] = geography.get('searchArea') or geography.get('region') or obj.get('region')
+        assert obj['region'], f'Provide verified propertyGeography for {identity}; do not infer geography from an Idealista ID'
+    else:
+        assert identity[:2] in search_areas, f'Unknown property ID prefix: {identity}'
+        obj['region'] = search_areas[identity[:2]]
     obj.pop('rank', None)
     obj['costs'] = costs[identity]
     obj['components'] = {k:v for k,v in scores[identity].items() if k not in ['Property ID','Property','Total /100','Reason']}
@@ -67,3 +72,4 @@ out.mkdir(parents=True,exist_ok=True)
 (out/'properties.json').write_text(json.dumps(data,ensure_ascii=False))
 (out/'media.json').write_text(json.dumps(media))
 print(json.dumps({'properties':len(properties),'photos':len(media),'with_photos':sum(bool(p['photos']) for p in properties),'sourceRevision':data['sourceRevision']}))
+

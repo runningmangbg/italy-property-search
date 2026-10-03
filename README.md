@@ -6,7 +6,9 @@ A private collection for exploring and comparing homes in Abruzzo, Marche and th
 
 - Four-property pages with ranking, region/province/search filters, price ordering and comparison of up to three homes.
 - Full dossiers, original photos and credits, evidence classes, owner and guest layout hypotheses, score breakdowns, costs, aliases and price observations.
-- Ranked, price-watch, favourite, on-hold and closed views; dated search reports and the authoritative search brief.
+- One combined collection for market discoveries and shared Idealista favourites, with verified duplicates merged, source filtering, pending evaluations and exclusions.
+- Either owner can exclude a home; complete-list removals and confirmed unavailable properties are kept out of rankings while preserving history.
+- Ranked, pending-evaluation, price-watch, favourite, on-hold and excluded views; dated search reports and the authoritative search brief.
 - Individual password sign-ins, server-side sessions, CSRF protection and rate-limited login.
 - Shared PostgreSQL comments and decisions, atomic writes, optimistic concurrency and idempotent retries.
 - Authenticated imports preserving stable IDs, historical snapshots, source aliases and every saved decision.
@@ -55,3 +57,4 @@ npm run dev
 `DEV_DATABASE` enables local embedded PostgreSQL (PGlite). `DEV_PREVIEW=1` enables a local preview identity and binds only to loopback. Production never enables this identity or falls back to local storage.
 
 Tests cover access, CSRF, cross-user feedback, conflicts, idempotent saves, retained closures after price drops, source history, invalid media and logout.
+

@@ -18,7 +18,7 @@ export async function referenceReviews(db) {
       return { ...user, rejected: vote?.rejected || false, reason: vote?.reason || '', revision: vote?.revision || 0, updatedAt: vote?.updated_at || null };
     });
     const email = emails.find(e => e.reference_id === id);
-    return { decisions, bothRejected: decisions.every(v => v.rejected), email: email ? { state: email.state, sentAt: email.sent_at } : null };
+    return { decisions, anyRejected: decisions.some(v => v.rejected), bothRejected: decisions.every(v => v.rejected), email: email ? { state: email.state, sentAt: email.sent_at } : null };
   };
 }
 
@@ -87,3 +87,4 @@ export function installReferenceDecisions(app, { db, session, csrf, importer }) 
     res.status(r.rows.length ? 200 : 409).json(r.rows.length ? { saved: true } : { error: 'This delivery claim is no longer valid.' });
   });
 }
+

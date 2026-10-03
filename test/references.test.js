@@ -68,3 +68,28 @@ test('stale, malformed and conflicting imports are rejected; absent listings kee
   const after = (await bob.get('/api/references')).body;
   assert.equal(after.meta.sourceRevision,'r3');
 });
+
+test('an empty list requires explicit completeness and preserves auditable membership and feedback', async () => {
+  const empty = { ...bundle, sourceRevision: 'r4', expectedRevision: 'r3', homes: [] };
+  await post(empty).expect(400);
+  assert.equal((await bob.get('/api/references')).body.meta.sourceRevision, 'r3');
+  await post({ ...empty, complete: true }).expect(200);
+  const e = (await request(app).get('/api/export').set('Authorization', `Bearer ${secret}`)).body;
+  assert.ok(e.reference_homes.every(h => !h.listed));
+  assert.equal(e.reference_notes.length, 1);
+  assert.ok(e.reference_membership_events.some(x => x.reference_id === '87654321' && x.listed === false && x.source_revision === 'r4'));
+  assert.equal(e.collection.find(p => p.id === 'MR001').rank, null);
+  assert.equal(e.collection.find(p => p.id === 'MR001').referenceRemoved, true);
+});
+
+test('a scored saved home outside the broad discovery area joins the combined ranking once', async () => {
+  const p = { id: 'IL22345678', name: 'Individually selected home', region: 'Piemonte', province: 'Cuneo', price: 185000, score: 71, source: 'https://www.idealista.it/immobile/22345678/' };
+  await request(app).post('/api/import').set('Authorization', `Bearer ${secret}`).send({ sourceRevision: 'scored-favourite', observedAt: bundle.observedAt, properties: [p] }).expect(200);
+  const saved = { ...home, id: '22345678', url: p.source, region: p.region, province: p.province, matches: ['IL22345678'] };
+  await post({ ...bundle, sourceRevision: 'r5', expectedRevision: 'r4', homes: [saved] }).expect(200);
+  const collection = (await bob.get('/api/properties')).body.properties;
+  assert.equal(collection.filter(p => p.referenceIds.includes(saved.id)).length, 1);
+  assert.equal(collection.find(x => x.id === p.id).rank, 1);
+  await request(app).get('/properties/IL22345678').expect(200);
+  assert.equal((await bob.get('/api/properties/IL22345678')).body.property.score, 71);
+});
