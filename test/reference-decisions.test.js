@@ -33,7 +33,7 @@ test('260k is inside the ceiling; 260001 stays on watch; held and closed homes s
   assert.equal(budget({price:260001}).pool,'watch'); assert.equal(budget({price:270000}).reductionToCeiling,10000);
   assert.equal(budget({price:255000},{status:'Closed'}).pool,'closed'); assert.equal(budget({price:260000},{status:'On hold'}).pool,'hold');
 });
-test('each reviewer owns their rejection; one rejection never queues email; retries cannot cast another vote', async () => {
+test('each reviewer owns their rejection; one rejection excludes ranking but never queues email', async () => {
   await request(app).get('/api/removal-emails').expect(401);
   await clients.peter.get('/api/removal-emails').expect(401);
   await clients.peter.post('/api/references/12345678/decision').send({}).expect(403);
@@ -46,7 +46,9 @@ test('each reviewer owns their rejection; one rejection never queues email; retr
   assert.equal((await queue()).length,0);
   const view=(await clients.rebecka.get('/api/references/12345678')).body.home.review;
   assert.equal(view.decisions.find(v=>v.id==='peter').rejected,true); assert.equal(view.decisions.find(v=>v.id==='rebecka').rejected,false);
-  assert.equal((await clients.peter.get('/api/properties/MR001')).body.property.rank,1);
+  const property=(await clients.peter.get('/api/properties/MR001')).body.property;
+  assert.equal(property.rank,null); assert.equal(property.pool,'excluded');
+  assert.equal(property.referenceRejected,true); assert.equal(property.jointlyRejected,false);
 });
 test('joint rejection queues once, excludes a verified linked dossier, survives imports and supports undo', async () => {
   assert.equal((await vote('rebecka','12345678',true,'Layout is wrong.')).status,200);
@@ -57,10 +59,16 @@ test('joint rejection queues once, excludes a verified linked dossier, survives 
   assert.equal((await queue()).length,1); assert.equal((await clients.peter.get('/api/references/12345678')).body.home.review.bothRejected,true);
   assert.equal((await vote('peter','12345678',false)).status,200);
   assert.equal((await queue())[0].state,'cancelled'); assert.equal((await queue())[0].eligible,false);
-  assert.equal((await clients.peter.get('/api/properties/MR001')).body.property.rank,1);
+  p=(await clients.peter.get('/api/properties/MR001')).body.property;
+  assert.equal(p.rank,null); assert.equal(p.referenceRejected,true); assert.equal(p.jointlyRejected,false);
+  assert.equal((await vote('rebecka','12345678',false)).status,200);
+  p=(await clients.peter.get('/api/properties/MR001')).body.property;
+  assert.equal(p.rank,1); assert.equal(p.referenceRejected,false);
   await operator(`/api/removal-emails/${q[0].id}/claim`,{claimId:randomUUID()}).expect(409);
   assert.equal((await vote('peter','12345678',true)).status,200);
-  assert.equal((await queue())[0].id,q[0].id); assert.equal((await queue())[0].state,'pending');
+  assert.equal((await queue())[0].id,q[0].id); assert.equal((await queue())[0].state,'cancelled');
+  assert.equal((await vote('rebecka','12345678',true)).status,200);
+  assert.equal((await queue())[0].state,'pending');
 });
 test('delivery claims prevent duplicate workers; uncertain sends are held; confirmed receipts are idempotent', async () => {
   const e=(await queue())[0], claimId=randomUUID();
@@ -88,4 +96,14 @@ test('concurrent personal decisions produce one notification and stale tabs cann
   assert.equal((await queue()).find(x=>x.id===e.id).state,'pending');
   await vote('rebecka','87654321',false);
   await operator(`/api/removal-emails/${e.id}/claim`,{claimId:randomUUID()}).expect(409);
+});
+
+test('a complete shared-list removal excludes a verified linked dossier and re-addition clears only that gate', async () => {
+  await operator('/api/import/references',{...importBundle,sourceRevision:'membership-without-linked',expectedRevision:'joint-refresh',homes:[listing('87654321')]}).expect(200);
+  let p=(await clients.peter.get('/api/properties/MR001')).body.property;
+  assert.equal(p.rank,null); assert.equal(p.pool,'excluded'); assert.equal(p.referenceRemoved,true);
+  await operator('/api/import/references',{...importBundle,sourceRevision:'membership-restored',expectedRevision:'membership-without-linked'}).expect(200);
+  p=(await clients.peter.get('/api/properties/MR001')).body.property;
+  assert.equal(p.referenceRemoved,false);
+  assert.equal(p.rank,null); // Existing personal rejections still apply independently.
 });
