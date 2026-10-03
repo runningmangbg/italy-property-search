@@ -113,3 +113,15 @@ CREATE TABLE IF NOT EXISTS reference_removal_emails (
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now()
 );
+
+
+-- Append-only source membership history; personal feedback remains independent.
+CREATE TABLE IF NOT EXISTS reference_membership_events (
+  id bigserial PRIMARY KEY,
+  reference_id text NOT NULL REFERENCES reference_homes(id),
+  source_revision text NOT NULL,
+  listed boolean NOT NULL,
+  observed_at timestamptz NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE(reference_id, source_revision)
+);

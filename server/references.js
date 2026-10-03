@@ -11,8 +11,11 @@ const homeSchema = z.object({
   price: z.number().positive().nullable(), region: z.string().max(80), province: z.string().max(80),
   position: z.number().int().nonnegative(), area: z.string().max(300), land: z.string().max(500),
   checkedAt: z.iso.datetime({ offset: true }).optional(),
+  availability: z.enum(['advertised', 'unknown', 'sold', 'withdrawn', 'removed', 'unavailable']).optional(),
+  availabilityCheckedAt: z.iso.datetime({ offset: true }).optional(),
+  availabilityEvidence: text.optional(),
   photo: z.object({ url: z.url().refine(v => /^https:\/\/img[1-4]\.idealista\.it\/.*image\.master\//.test(v)), alt: z.string().max(500) }).nullable(),
-  matches: z.array(z.string().regex(/^(AB|MR|DL)\d{3,6}$/)).max(10),
+  matches: z.array(z.string().regex(/^(?:(?:AB|MR|DL)\d{3,6}|IL\d{5,12})$/)).max(10),
   matchNote: text.default(''), duplicateOf: referenceId.nullable().default(null),
   assessment: z.object({
     verdict: z.enum(['outside-brief', 'concern', 'potential', 'needs-review']),
@@ -24,8 +27,8 @@ const importSchema = z.object({
   sourceRevision: z.string().min(1).max(200), expectedRevision: z.string().max(200).nullable().default(null),
   observedAt: z.iso.datetime({ offset: true }), listName: z.string().min(1).max(200),
   sourceUrl: z.url().refine(v => /^https:\/\/www\.idealista\.it\/fav-list\/\d+\?/.test(v)),
-  homes: z.array(homeSchema).min(1).max(3000),
-}).strict();
+  homes: z.array(homeSchema).max(3000), complete: z.literal(true).optional(),
+}).strict().refine(v => v.homes.length > 0 || v.complete === true, 'An empty list requires an explicitly complete snapshot.');
 const noteSchema = z.object({ requestId: z.uuid(), comment: z.string().trim().min(1).max(8000) }).strict();
 
 export function installReferences(app, { db, session, csrf, importer }) {
@@ -62,7 +65,7 @@ export function installReferences(app, { db, session, csrf, importer }) {
     const parsed = importSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: 'Invalid reference collection.', details: parsed.error.issues.slice(0, 8).map(i => ({ path: i.path, message: i.message })) });
     const input = parsed.data, ids = new Set(input.homes.map(h => h.id));
-    if (ids.size !== input.homes.length || input.homes.some(h => h.duplicateOf && (!ids.has(h.duplicateOf) || h.duplicateOf === h.id))) return res.status(400).json({ error: 'Use unique listing IDs and valid duplicate links.' });
+    if (ids.size !== input.homes.length || input.homes.some(h => h.duplicateOf === h.id)) return res.status(400).json({ error: 'Use unique listing IDs and valid duplicate links.' });
     const hash = digest({ observedAt: input.observedAt, listName: input.listName, sourceUrl: input.sourceUrl, homes: input.homes });
     const result = await db.transaction(async tx => {
       await tx.query("INSERT INTO project_meta(key,value) VALUES('idealistaReferences','null'::jsonb) ON CONFLICT DO NOTHING");
@@ -75,8 +78,20 @@ export function installReferences(app, { db, session, csrf, importer }) {
       const known = new Set((await tx.query('SELECT id FROM properties')).rows.map(r => r.id));
       if (input.homes.some(h => h.matches.some(id => !known.has(id)))) throw Object.assign(new Error('A linked dossier does not exist.'), { status: 400 });
       // Refresh source observations without touching either collection's personal decisions or notes.
+      const previousHomes = new Map((await tx.query('SELECT id,data,listed FROM reference_homes')).rows.map(h => [h.id, h]));
+      const previousMembership = new Map([...previousHomes].map(([id, h]) => [id, h.listed]));
+      if (input.homes.some(h => h.duplicateOf && !ids.has(h.duplicateOf) && !previousHomes.has(h.duplicateOf))) throw Object.assign(new Error('A duplicate listing does not exist.'), { status: 400 });
+      await tx.query("UPDATE reference_homes SET data=data || jsonb_build_object('listRemovedAt',$1::text,'listRemovedRevision',$2::text) WHERE listed AND NOT (id=ANY($3::text[]))", [input.observedAt, input.sourceRevision, [...ids]]);
       await tx.query('UPDATE reference_homes SET listed=false');
-      for (const h of input.homes) await tx.query('INSERT INTO reference_homes(id,data,listed) VALUES($1,$2,true) ON CONFLICT(id) DO UPDATE SET data=EXCLUDED.data,listed=true,imported_at=now()', [h.id, JSON.stringify({ ...h, checkedAt: h.checkedAt || input.observedAt })]);
+      for (const h of input.homes) {
+        const previous = previousHomes.get(h.id)?.data || {};
+        const retained = Object.fromEntries(['availability', 'availabilityCheckedAt', 'availabilityEvidence'].filter(k => previous[k] !== undefined).map(k => [k, previous[k]]));
+        const data = { ...retained, ...h, checkedAt: h.checkedAt || previous.checkedAt || input.observedAt,
+          matches: [...new Set([...(previous.matches || []), ...h.matches])], duplicateOf: h.duplicateOf || previous.duplicateOf || null };
+        await tx.query('INSERT INTO reference_homes(id,data,listed) VALUES($1,$2,true) ON CONFLICT(id) DO UPDATE SET data=EXCLUDED.data,listed=true,imported_at=now()', [h.id, JSON.stringify(data)]);
+      }
+      for (const [id, wasListed] of previousMembership) if (wasListed && !ids.has(id)) await tx.query('INSERT INTO reference_membership_events(reference_id,source_revision,listed,observed_at) VALUES($1,$2,false,$3) ON CONFLICT DO NOTHING', [id, input.sourceRevision, input.observedAt]);
+      for (const id of ids) if (previousMembership.get(id) !== true) await tx.query('INSERT INTO reference_membership_events(reference_id,source_revision,listed,observed_at) VALUES($1,$2,true,$3) ON CONFLICT DO NOTHING', [id, input.sourceRevision, input.observedAt]);
       const meta = { sourceRevision: input.sourceRevision, observedAt: input.observedAt, listName: input.listName, sourceUrl: input.sourceUrl, count: input.homes.length, contentHash: hash, importedAt: new Date().toISOString() };
       await tx.query("UPDATE project_meta SET value=$1,updated_at=now() WHERE key='idealistaReferences'", [JSON.stringify(meta)]);
       return { ...meta, repeated: false };
@@ -84,3 +99,4 @@ export function installReferences(app, { db, session, csrf, importer }) {
     res.json(result);
   });
 }
+

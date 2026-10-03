@@ -46,9 +46,9 @@ test('each reviewer owns their rejection; one rejection never queues email; retr
   assert.equal((await queue()).length,0);
   const view=(await clients.rebecka.get('/api/references/12345678')).body.home.review;
   assert.equal(view.decisions.find(v=>v.id==='peter').rejected,true); assert.equal(view.decisions.find(v=>v.id==='rebecka').rejected,false);
-  assert.equal((await clients.peter.get('/api/properties/MR001')).body.property.rank,1);
+  assert.equal((await clients.peter.get('/api/properties/MR001')).body.property.rank,null);
 });
-test('joint rejection queues once, excludes a verified linked dossier, survives imports and supports undo', async () => {
+test('joint rejection queues once; either remaining vote excludes after undo and imports preserve decisions', async () => {
   assert.equal((await vote('rebecka','12345678',true,'Layout is wrong.')).status,200);
   const q=await queue(); assert.equal(q.length,1); assert.equal(q[0].state,'pending'); assert.equal(q[0].eligible,true);
   assert.equal(q[0].listingUrl,'https://www.idealista.it/immobile/12345678/');
@@ -57,7 +57,7 @@ test('joint rejection queues once, excludes a verified linked dossier, survives 
   assert.equal((await queue()).length,1); assert.equal((await clients.peter.get('/api/references/12345678')).body.home.review.bothRejected,true);
   assert.equal((await vote('peter','12345678',false)).status,200);
   assert.equal((await queue())[0].state,'cancelled'); assert.equal((await queue())[0].eligible,false);
-  assert.equal((await clients.peter.get('/api/properties/MR001')).body.property.rank,1);
+  assert.equal((await clients.peter.get('/api/properties/MR001')).body.property.rank,null);
   await operator(`/api/removal-emails/${q[0].id}/claim`,{claimId:randomUUID()}).expect(409);
   assert.equal((await vote('peter','12345678',true)).status,200);
   assert.equal((await queue())[0].id,q[0].id); assert.equal((await queue())[0].state,'pending');
@@ -89,3 +89,4 @@ test('concurrent personal decisions produce one notification and stale tabs cann
   await vote('rebecka','87654321',false);
   await operator(`/api/removal-emails/${e.id}/claim`,{claimId:randomUUID()}).expect(409);
 });
+
