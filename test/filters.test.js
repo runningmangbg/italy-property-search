@@ -45,6 +45,20 @@ export async function filterPage(properties = sample, path = '/') {
   };
 }
 
+test('lowest-ranked sorting reverses global ranks, keeps unranked homes last, and survives reload', async () => {
+  const page = await filterPage();
+  await page.change('sort', 'rank-desc');
+  assert.deepEqual(page.ids(), ['AB003', 'AB002', 'AB001']);
+  await page.change('source', 'idealista');
+  assert.deepEqual(page.ids(), ['AB003', 'AB001', 'IL32345678', 'MR001']);
+  assert.equal(page.run('state.page'), 1);
+  const restored = await filterPage(sample, page.location.pathname + page.location.search);
+  assert.equal(restored.run('state.sort'), 'rank-desc');
+  assert.deepEqual(restored.ids(), page.ids());
+  await page.change('sort', 'rank');
+  assert.deepEqual(page.ids(), ['AB001', 'AB003', 'IL32345678', 'MR001']);
+});
+
 test('My Idealista list includes pending and price-watch homes, excluding all inactive decisions', async () => {
   const page = await filterPage();
   assert.deepEqual(page.ids(), ['AB001', 'AB002', 'AB003']);
