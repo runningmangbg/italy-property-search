@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import vm from 'node:vm';
 import { readFile } from 'node:fs/promises';
+import { openDossier } from './support/dossier-page.js';
 
 const home = (id, pool, extra = {}) => ({ id, name: 'Home ' + id, pool, region: 'Abruzzo', province: 'CH', status: 'Open', score: pool === 'verify' ? null : 70, rank: null, price: 180000, photos: [], referenceIds: [], ...extra });
 const sample = [
@@ -16,6 +17,42 @@ const sample = [
   home('AB007', 'hold', { referenceIds: ['82345678'] }),
   home('AB008', 'closed', { referenceIds: ['92345678'] }),
 ];
+
+test('Major restoration is a persistent review list across active, held and excluded decisions', async () => {
+  const review = { condition: { category: 'major-restoration', scope: 'Ancillary roof only' }, views: { grade: 'excellent' } };
+  const properties = sample.map(p => ['AB001', 'AB004', 'AB007', 'AB008'].includes(p.id) ? { ...p, photoReview: review } : p);
+  const page = await filterPage(properties, '/?view=restoration');
+  assert.deepEqual(page.ids(), ['AB001', 'AB004', 'AB007', 'AB008']);
+  assert.equal(page.run('counts().restoration'), 4);
+  assert.match(page.node('#cards').innerHTML, /Ancillary roof only/);
+  assert.match(page.node('#cards').innerHTML, /Rejected/);
+  await page.change('source', 'idealista');
+  assert.equal(page.run('state.tab'), 'restoration');
+  assert.deepEqual(page.ids(), ['AB001', 'AB004', 'AB007', 'AB008']);
+  const restored = await filterPage(properties, page.location.pathname + page.location.search);
+  assert.deepEqual(restored.ids(), page.ids());
+  await page.view('ranked');
+  assert.deepEqual(page.ids(), ['AB001', 'AB003']);
+  assert.equal(properties.find(p => p.id === 'AB004').rejected, true);
+});
+
+test('dossier explains photo scope, uncertainty, score changes and excluded imagery safely', async () => {
+  const p = home('AB001', 'ranked', { photoReview: {
+    reviewDate: '2026-10-04', imageCount: 1, confidence: 'low',
+    condition: { category: 'major-restoration', scope: 'Annex only', observation: '<script>bad</script>', priorEvidence: 'Full restoration of annex reported.' },
+    views: { grade: 'not-assessable', observation: 'AI-labelled image excluded.' },
+    scores: { before: { 'Technical /5': 2, 'Outdoor views sun /10': 5 }, after: { 'Technical /5': 1, 'Outdoor views sun /10': 5 }, totalBefore: 70, totalAfter: 69 },
+    method: 'Saved images reviewed.', limitations: 'Survey required.', sources: [{ imageIndex: 1, sourceUrl: 'https://example.test/listing', excludedFromScoring: true }],
+  } });
+  const { html } = await openDossier(p);
+  assert.match(html, /Condition & views/);
+  assert.match(html, /Annex only/);
+  assert.match(html, /Total at review: 70 → 69/);
+  assert.match(html, /excluded from scoring/);
+  assert.match(html, /\?view=restoration/);
+  assert.match(html, /&lt;script&gt;bad&lt;\/script&gt;/);
+  assert.doesNotMatch(html, /<script>bad/);
+});
 
 // Execute the shipped scripts and their real event handlers, using a small DOM sink.
 export async function filterPage(properties = sample, path = '/') {
