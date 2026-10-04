@@ -32,3 +32,10 @@ test('existing app-format dossiers retain their evidence and escape listing text
   assert.doesNotMatch(html, /class="error"|<script>unsafe/);
   assert.ok(html.includes('House &lt;script&gt;unsafe()&lt;/script&gt;'));
 });
+
+test('a saved house dossier exposes its Idealista advert alongside a different primary portal', async () => {
+  const [property] = rank([{ data: { id: 'AB099', name: 'Saved home', price: 190000, source: 'https://www.immobiliare.it/annunci/123456789/', referenceIds: ['12345678'] } }]);
+  const { html } = await openDossier(property);
+  assert.match(html, /href="https:\/\/www.idealista.it\/immobile\/12345678\/" target="_blank" rel="noopener noreferrer">Open on Idealista/);
+  assert.match(html, /href="https:\/\/www.immobiliare.it\/annunci\/123456789\/"/);
+});

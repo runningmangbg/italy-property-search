@@ -154,3 +154,16 @@ test('paging is available above the first card and reveals the remaining saved h
   assert.equal(page.run('state.page'), 1);
   assert.equal(page.ids().length, 6);
 });
+
+test('every saved-home card links directly to its Idealista advert, independently of the primary portal', async () => {
+  const page = await filterPage();
+  for (const pool of ['ranked', 'verify', 'watch', 'hold', 'closed', 'excluded', 'inactive']) {
+    const p = home('AB099', pool, { source: 'https://www.immobiliare.it/annunci/123456789/', referenceIds: ['12345678', '22345678', '12345678'] });
+    const html = page.run('card(' + JSON.stringify(p) + ')');
+    assert.match(html, /href="https:\/\/www.idealista.it\/immobile\/12345678\/" target="_blank" rel="noopener noreferrer">Open on Idealista/);
+    assert.equal((html.match(/immobile\/12345678\//g) || []).length, 1);
+    assert.match(html, /immobile\/22345678\/.*Alternative Idealista advert 2/);
+  }
+  assert.equal(page.run('idealistaLinks({referenceIds: []})'), '');
+  assert.equal(page.run('idealistaLinks({referenceIds: ["bad-id"]})'), '');
+});
