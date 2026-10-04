@@ -51,7 +51,8 @@ test('My Idealista list includes pending and price-watch homes, excluding all in
   await page.change('source', 'idealista');
   assert.equal(page.run('state.tab'), 'active');
   assert.deepEqual(page.ids(), ['AB001', 'AB003', 'IL32345678', 'MR001']);
-  assert.match(page.node('#filter-context').textContent, /4 active homes: 2 ranked, 1 awaiting evaluation and 1 on price watch/);
+  assert.match(page.node('#filter-context').innerHTML, /4 active homes/);
+  assert.match(page.node('#filter-context').innerHTML, /data-tab="verify">1 awaiting evaluation/);
   assert.match(page.node('#result-count').textContent, /4 homes in Active homes/);
   await page.view('ranked');
   assert.deepEqual(page.ids(), ['AB001', 'AB003']);
@@ -130,4 +131,26 @@ test('legacy saved-list links open the same active collection with exclusions re
   await page.run('showReferences()');
   assert.equal(page.location.search, '?view=active&source=idealista');
   assert.deepEqual(page.ids(), ['AB001', 'AB003', 'IL32345678', 'MR001']);
+});
+
+test('paging is available above the first card and reveals the remaining saved homes', async () => {
+  const extra = Array.from({ length: 5 }, (_, n) => home('IL1134567' + n, 'verify', { referenceIds: ['1134567' + n] }));
+  const page = await filterPage([...sample, ...extra]);
+  await page.change('source', 'idealista');
+  const html = page.node('#collection-content').innerHTML;
+  assert.ok(html.indexOf('id="pagination-top"') < html.indexOf('id="cards"'));
+  assert.match(page.node('#pagination-top').innerHTML, /Page 1 of 3/);
+  assert.match(page.node('#pagination-top').innerHTML, /data-page="2" >Next/);
+  await page.fire('click', { dataset: { page: '2' } });
+  assert.match(page.node('#result-count').textContent, /5–8/);
+  for (const p of extra.slice(0, 4)) assert.ok(page.node('#cards').innerHTML.includes(p.id));
+  assert.doesNotMatch(page.node('#cards').innerHTML, /Home AB001/);
+  assert.equal(page.node('#pagination-top').innerHTML, page.node('#pagination').innerHTML);
+  await page.fire('click', { dataset: { page: '3' } });
+  assert.match(page.node('#result-count').textContent, /9–9/);
+  assert.match(page.node('#pagination-top').innerHTML, /disabled>Next/);
+  await page.view('verify');
+  assert.equal(page.run('state.source'), 'idealista');
+  assert.equal(page.run('state.page'), 1);
+  assert.equal(page.ids().length, 6);
 });

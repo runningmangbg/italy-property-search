@@ -7,3 +7,22 @@
 
 .decision-people{display:grid;gap:12px;margin:18px 0}.decision-people>div{padding-bottom:10px;border-bottom:1px solid var(--line)}.decision-people strong{display:block;margin-bottom:5px}.decision-people p{white-space:pre-wrap;overflow-wrap:anywhere}.reference-decision .btn{margin-top:12px}
 
+/* Keep native selects inside their grid tracks, including iOS Safari. */
+.filters{grid-template-columns:minmax(0,2fr) repeat(4,minmax(0,1fr))}
+.filters label,.filters input,.filters select{min-width:0;max-width:100%}
+.grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+.filter-shortcuts{display:flex;flex-wrap:wrap;gap:4px 12px;margin:7px 0}
+.filter-shortcuts .link-button{min-height:44px;text-align:left}
+.filter-shortcuts [aria-pressed="true"]{font-weight:bold;color:var(--ink)}
+.filter-help{display:block}
+#pagination-top .pagination{justify-content:space-between;padding:0 0 20px}
+@media(max-width:760px){
+  .filters{grid-template-columns:repeat(2,minmax(0,1fr))}
+  input,select,textarea{font-size:16px;min-width:0;max-width:100%}
+  .grid{grid-template-columns:minmax(0,1fr)}
+  .results-line{flex-direction:column;gap:8px}
+  .results-line>span{max-width:100%}
+  .card-top,.card-actions{flex-wrap:wrap}
+  .pagination{gap:10px}
+  .pagination button{min-height:44px;padding:8px 14px}
+}
