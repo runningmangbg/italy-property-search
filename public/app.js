@@ -1,6 +1,32 @@
 const main = document.querySelector('#main');
 const account = document.querySelector('#account');
 const state = { user: null, csrf: '', properties: [], meta: {}, tab: 'ranked', search: '', region: '', province: '', sort: 'rank', source: '', page: 1, compare: new Set(), detail: null, requestId: null };
+const activePools = ['ranked', 'watch', 'verify'];
+const collectionTabs = ['ranked', 'active', 'verify', 'watch', 'favourites', 'hold', 'closed', 'all', 'weekly'];
+const provinceNames = { AQ: "L’Aquila", CH: 'Chieti', PE: 'Pescara', TE: 'Teramo', AN: 'Ancona', AP: 'Ascoli Piceno', FM: 'Fermo', MC: 'Macerata', PU: 'Pesaro e Urbino', BL: 'Belluno', TN: 'Trento', BZ: 'Bolzano', AL: 'Alessandria', AT: 'Asti' };
+const searchText = value => String(value ?? '').normalize('NFD').replace(/\p{M}/gu, '').replace(/[’']/g, '').toLowerCase().trim();
+function provinceKey(value) {
+  const text = searchText(value);
+  return Object.entries(provinceNames).find(([code, name]) => text === searchText(code) || text === searchText(name))?.[0] || text;
+}
+function provinceLabel(value) { const code = provinceKey(value); return provinceNames[code] ? `${provinceNames[code]} (${code})` : value; }
+function matchesFilters(p) {
+  const text = [p.id, p.name, p.region, p.administrativeRegion, p.province, provinceLabel(p.province), ...(p.referenceIds || []), ...(p.aliasPropertyIds || [])].join(' ');
+  return (!state.source || p.referenceIds?.length > 0) && (!state.region || p.region === state.region) && (!state.province || provinceKey(p.province) === provinceKey(state.province)) && searchText(text).includes(searchText(state.search));
+}
+function inView(p, tab = state.tab) {
+  return tab === 'all' || (tab === 'active' ? activePools.includes(p.pool) : tab === 'favourites' ? p.favourite && activePools.includes(p.pool) : tab === 'closed' ? ['closed', 'excluded', 'dropped', 'inactive'].includes(p.pool) : p.pool === tab);
+}
+function collectionUrl() {
+  const params = new URLSearchParams();
+  for (const [key, value, defaultValue] of [['view', state.tab, 'ranked'], ['source', state.source, ''], ['region', state.region, ''], ['province', state.province, ''], ['sort', state.sort, 'rank'], ['q', state.search, ''], ['page', String(state.page), '1']]) if (value !== defaultValue) params.set(key, value);
+  return '/' + (params.size ? '?' + params : '');
+}
+function rememberFilters() { history.replaceState({}, '', collectionUrl()); }
+function readFilters() {
+  const params = new URLSearchParams(location.search), view = params.get('view'), source = params.get('source') === 'idealista' ? 'idealista' : '';
+  Object.assign(state, { tab: [...collectionTabs, 'profile', 'compare'].includes(view) ? view : source ? 'active' : 'ranked', source, region: params.get('region') || '', province: params.get('province') || '', search: params.get('q') || '', sort: ['price', 'region'].includes(params.get('sort')) ? params.get('sort') : 'rank', page: Math.max(1, Number.parseInt(params.get('page'), 10) || 1) });
+}
 const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const euros = value => typeof value === 'number' ? new Intl.NumberFormat('en-IE', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(value) : 'Price unverified';
 const date = value => value ? new Date(value).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : 'Not recorded';
@@ -22,40 +48,45 @@ function login(error = '') {
   main.innerHTML = `<section class="login"><div class="eyebrow">Peter & Rebecka’s collection</div><h1>Welcome home.</h1><p class="muted">Sign in to explore the houses and share your thoughts.</p><form id="login"><label>Your name<input name="username" autocomplete="username" required placeholder="Peter or Rebecka"></label><label>Password<input type="password" name="password" autocomplete="current-password" required></label><div id="login-error" class="${error ? 'error' : ''}" role="alert">${esc(error)}</div><button class="btn" type="submit">Open the collection</button></form></section>`;
 }
 async function refresh() { const data = await api('/api/properties'); state.properties = data.properties; state.meta = data.meta; }
-function poolTitle(tab) { return ({ references: 'Idealista finds', ranked: 'Ranked homes', watch: 'Price watch', favourites: 'Favourites', hold: 'On hold', closed: 'Excluded', excluded: 'Excluded', dropped: 'Removed from your list', inactive: 'Unavailable', verify: 'To evaluate', all: 'All homes', weekly: 'Search updates', compare: 'Compare homes', profile: 'Our search brief' })[tab]; }
-function counts() {
-  const c = { references: state.meta.idealistaReferences?.count || 0, ranked: 0, watch: 0, favourites: 0, hold: 0, closed: 0, verify: 0, all: state.properties.length };
-  for (const p of state.properties) { if (c[p.pool] !== undefined) c[p.pool]++; if (['excluded', 'dropped', 'inactive'].includes(p.pool)) c.closed++; if (p.favourite && ['ranked', 'watch', 'verify'].includes(p.pool)) c.favourites++; }
+function poolTitle(tab) { return ({ references: 'Idealista finds', ranked: 'Ranked homes', active: 'Active homes', watch: 'Price watch', favourites: 'Favourites', hold: 'On hold', closed: 'Excluded', excluded: 'Excluded', dropped: 'Removed from your list', inactive: 'Unavailable', verify: 'To evaluate', all: 'All homes & history', weekly: 'Search updates', compare: 'Compare homes', profile: 'Our search brief' })[tab]; }
+function counts(properties = state.properties) {
+  const c = { ranked: 0, active: 0, watch: 0, favourites: 0, hold: 0, closed: 0, verify: 0, all: properties.length };
+  for (const p of properties) { if (c[p.pool] !== undefined) c[p.pool]++; if (['excluded', 'dropped', 'inactive'].includes(p.pool)) c.closed++; if (activePools.includes(p.pool)) { c.active++; if (p.favourite) c.favourites++; } }
   return c;
 }
 function collection() {
   if (state.tab === 'references') return showReferences();
   const c = counts();
-  const tabs = ['ranked', 'verify', 'watch', 'favourites', 'hold', 'closed', 'all', 'weekly'];
-  const provinces = [...new Set(state.properties.filter(p => !state.region || p.region === state.region).map(p => p.province))].sort();
+  const tabs = collectionTabs;
+  const filteredCounts = counts(state.properties.filter(matchesFilters));
+  const provinces = [...new Map(state.properties.filter(p => !state.region || p.region === state.region).map(p => [provinceKey(p.province), provinceLabel(p.province)]).filter(([code]) => code)).entries()].sort((a, b) => a[1].localeCompare(b[1]));
   main.innerHTML = `<div class="heading"><div><div class="eyebrow">Abruzzo, Marche & Dolomiti</div><h1>Finding our place in Italy.</h1><p class="muted">${c.all} homes · ${c.ranked} ranked · ${c.verify} awaiting evaluation · ${c.watch} on price watch</p></div><div class="budget-note"><strong>Purchase target ${euros(200000)}</strong><br>Up to ${euros(225000)} for a strong fit. ${euros(225000)}–${euros(260000)} needs an exceptional case.<br><button class="link-button" data-tab="profile">Our full search brief</button></div></div>
-  <nav class="nav" aria-label="Property views">${tabs.map(t => `<button data-tab="${t}" class="${state.tab === t ? 'active' : ''}" aria-current="${state.tab === t ? 'page' : 'false'}">${poolTitle(t)}${c[t] !== undefined ? `<span class="count">${c[t]}</span>` : ''}</button>`).join('')}</nav>
+  <nav class="nav" aria-label="Property views">${tabs.map(t => `<button data-tab="${t}" class="${state.tab === t ? 'active' : ''}" aria-current="${state.tab === t ? 'page' : 'false'}">${poolTitle(t)}${filteredCounts[t] !== undefined ? `<span class="count" data-count="${t}">${filteredCounts[t]}</span>` : ''}</button>`).join('')}</nav>
   <div id="collection-content"></div>`;
   if (state.tab === 'weekly') return renderWeekly();
   if (state.tab === 'profile') return renderProfile();
   if (state.tab === 'compare') return renderCompare();
   document.querySelector('#collection-content').innerHTML = `${state.tab === 'verify' ? '<p class="notice">These homes are awaiting assessment using the same criteria as the ranked collection. Their scores will be added during the weekly update.</p>' : ''}${state.tab === 'watch' ? '<p class="notice">These homes are either above the €260,000 purchase ceiling or do not yet meet the strong-case budget gate. They retain their assessments but have no active rank. Comments and favourites do not change budget eligibility.</p>' : ''}
-  <div class="filters"><label>Find a home<input id="search" type="search" placeholder="Town, property name or ID" value="${esc(state.search)}"></label><label>Region<select id="region"><option value="">All search areas</option>${[...new Set(state.properties.map(p => p.region))].sort().map(r => `<option${state.region === r ? ' selected' : ''}>${esc(r)}</option>`).join('')}</select></label><label>Province<select id="province"><option value="">All provinces</option>${provinces.map(r => `<option${state.province === r ? ' selected' : ''}>${esc(r)}</option>`).join('')}</select></label><label>Source<select id="source"><option value="">All sources</option><option value="idealista"${state.source === 'idealista' ? ' selected' : ''}>Your Idealista list</option></select></label><label>Sort by<select id="sort"><option value="rank">Overall ranking</option><option value="price">Lowest price</option><option value="region">Region & province</option></select></label></div><div class="results-line"><span id="result-count"></span><span><button class="link-button" data-tab="compare">Compare selected (${state.compare.size}/3)</button> · <button class="link-button" id="clear-filters">Reset filters</button></span></div><div id="cards" class="grid"></div><div id="pagination"></div>`;
+  <div class="filters"><label>Find a home<input id="search" type="search" placeholder="Town, property name or ID" value="${esc(state.search)}"></label><label>Region<select id="region"><option value="">All search areas</option>${[...new Set(state.properties.map(p => p.region))].sort().map(r => `<option${state.region === r ? ' selected' : ''}>${esc(r)}</option>`).join('')}</select></label><label>Province<select id="province"><option value="">All provinces</option>${provinces.map(([code, label]) => `<option value="${esc(code)}"${provinceKey(state.province) === code ? ' selected' : ''}>${esc(label)}</option>`).join('')}</select></label><label>Source<select id="source"><option value="">All sources</option><option value="idealista"${state.source === 'idealista' ? ' selected' : ''}>My Idealista list</option></select></label><label>Sort by<select id="sort"><option value="rank">Overall ranking</option><option value="price">Lowest price</option><option value="region">Region & province</option></select></label></div><p id="filter-context" class="small muted"></p><div class="results-line"><span id="result-count" role="status" aria-live="polite"></span><span><button class="link-button" data-tab="compare">Compare selected (${state.compare.size}/3)</button> · <button class="link-button" id="clear-filters">Reset filters</button></span></div><div id="cards" class="grid"></div><div id="pagination"></div>`;
   document.querySelector('#sort').value = state.sort;
   renderCards();
 }
 function matches() {
-  let p = state.properties.filter(p => state.tab === 'all' || (state.tab === 'favourites' ? p.favourite && ['ranked', 'watch', 'verify'].includes(p.pool) : state.tab === 'closed' ? ['closed', 'excluded', 'dropped', 'inactive'].includes(p.pool) : p.pool === state.tab));
-  p = p.filter(p => (!state.source || p.referenceIds?.length) && (!state.region || p.region === state.region) && (!state.province || p.province === state.province) && `${p.id} ${p.name} ${p.province} ${p.region}`.toLowerCase().includes(state.search.toLowerCase()));
+  const p = state.properties.filter(p => inView(p) && matchesFilters(p));
   if (state.sort === 'price') p.sort((a, b) => (a.price ?? Infinity) - (b.price ?? Infinity));
-  if (state.sort === 'region') p.sort((a, b) => a.region.localeCompare(b.region) || a.province.localeCompare(b.province) || (a.rank ?? Infinity) - (b.rank ?? Infinity));
+  else if (state.sort === 'region') p.sort((a, b) => a.region.localeCompare(b.region) || provinceLabel(a.province).localeCompare(provinceLabel(b.province)) || (a.rank ?? Infinity) - (b.rank ?? Infinity));
+  else p.sort((a, b) => (a.rank ?? Infinity) - (b.rank ?? Infinity));
   return p;
 }
 function renderCards() {
   const properties = matches(), pages = Math.max(1, Math.ceil(properties.length / 4));
   state.page = Math.min(state.page, pages);
+  rememberFilters();
+  const c = counts(state.properties.filter(matchesFilters));
+  document.querySelectorAll('[data-count]').forEach(el => { el.textContent = c[el.dataset.count]; });
+  document.querySelector('#filter-context').textContent = state.source ? `My Idealista list · ${c.active} active homes: ${c.ranked} ranked, ${c.verify} awaiting evaluation and ${c.watch} on price watch. On-hold and excluded homes are available in their history views. Counts reflect your current filters.` : 'Filters apply to the selected view. Active homes includes ranked, awaiting-evaluation and price-watch homes. Favourites contains homes you have marked on this website.';
   const shown = properties.slice((state.page - 1) * 4, state.page * 4);
-  document.querySelector('#result-count').textContent = `${properties.length} ${properties.length === 1 ? 'home' : 'homes'}${properties.length ? ` · ${(state.page - 1) * 4 + 1}–${Math.min(state.page * 4, properties.length)}` : ''}`;
+  document.querySelector('#result-count').textContent = `${properties.length} ${properties.length === 1 ? 'home' : 'homes'} in ${poolTitle(state.tab)}${properties.length ? ` · ${(state.page - 1) * 4 + 1}–${Math.min(state.page * 4, properties.length)}` : ''}`;
   document.querySelector('#cards').innerHTML = shown.length ? shown.map(card).join('') : '<div class="empty"><h2>No homes in this view.</h2><p class="muted">Try another view or clear the filters.</p></div>';
   document.querySelector('#pagination').innerHTML = `<div class="pagination"><button data-page="${state.page - 1}" ${state.page === 1 ? 'disabled' : ''}>Previous</button><span class="small">Page ${state.page} of ${pages}</span><button data-page="${state.page + 1}" ${state.page === pages ? 'disabled' : ''}>Next</button></div>`;
 }
@@ -103,12 +134,12 @@ function detail(draft = '') {
   <aside class="sticky">${p.referenceIds?.length ? `<section class="panel"><h2>Idealista notes & decisions</h2><p class="small">A rejection by either of you excludes this home.</p>${p.referenceIds.map(id => `<p><a href="/references/${id}" data-reference="${id}">Review listing ${id}</a></p>`).join('')}</section>` : ''}<section class="panel feedback"><h2>Our decision</h2><p class="small muted">Shared by Peter and Rebecka. Closing keeps the dossier and history.</p><form id="feedback"><label>Status<select name="status">${['Open', 'Interested', 'On hold', 'Closed'].map(s => `<option${s === p.status ? ' selected' : ''}>${s}</option>`).join('')}</select></label><label class="check-label"><input type="checkbox" name="favourite" ${p.favourite ? 'checked' : ''}>Keep in favourites</label><label>Your comment<textarea name="comment" maxlength="8000" placeholder="What do we think? What should we ask or check?">${esc(draft)}</textarea></label><div id="feedback-error" role="alert"></div><button class="btn" type="submit">Save our decision</button></form><p class="small muted">Saved as ${esc(state.user.name)}. A price change never reopens a closed or held home.</p></section><section class="panel"><h2>Conversation & history</h2><div id="history">${eventsHtml(events)}</div>${nextBefore ? `<button class="link-button" id="more-history" data-before="${nextBefore}">Earlier history</button>` : ''}</section><section class="panel"><h3>Explore the listing</h3>${link(p.source, 'Open primary listing')}<p class="small muted">${p.driveUrl ? link(p.driveUrl, 'Original Drive dossier') : ''}</p></section></aside></div>`;
 }
 function eventsHtml(events) { return events.length ? events.map(e => `<article class="history"><strong>${esc(e.actor_name)}</strong><br><small>${date(e.created_at)} · ${esc(e.status)}${e.favourite ? ' · Favourite' : ''}</small>${e.comment ? `<p>${esc(e.comment)}</p>` : ''}</article>`).join('') : '<p class="small muted">No comments yet. Start the conversation above.</p>'; }
-function navigate(id) { if (!id && state.tab === 'references') state.tab = 'ranked'; history.pushState({}, '', id ? `/properties/${id}` : '/'); if (id) showProperty(id); else collection(); window.scrollTo({ top: 0 }); }
+function navigate(id) { if (!id && state.tab === 'references') state.tab = 'ranked'; history.pushState({}, '', id ? `/properties/${id}` : collectionUrl()); if (id) showProperty(id); else collection(); window.scrollTo({ top: 0 }); }
 document.addEventListener('click', async event => {
   const target = event.target.closest('a,button'); if (!target) return;
   if (target.dataset.property) { event.preventDefault(); navigate(target.dataset.property); }
   else if (target.id === 'back' || target.classList.contains('brand')) { event.preventDefault(); await refresh().catch(() => {}); navigate(); }
-  else if (target.dataset.tab) { state.tab = target.dataset.tab; state.page = 1; if (state.tab === 'references') navigateReference(); else { history.pushState({}, '', '/'); collection(); } }
+  else if (target.dataset.tab) { state.tab = target.dataset.tab; state.page = 1; if (state.tab === 'references') navigateReference(); else { history.pushState({}, '', collectionUrl()); collection(); } }
   else if (target.dataset.page) { state.page = Number(target.dataset.page); renderCards(); document.querySelector('.filters').scrollIntoView({ block: 'start' }); }
   else if (target.id === 'clear-filters') { Object.assign(state, { search: '', region: '', province: '', sort: 'rank', source: '', page: 1 }); collection(); }
   else if (target.id === 'logout') { try { await api('/api/logout', { method: 'POST' }); state.properties = []; state.meta = {}; state.detail = null; Object.assign(referenceState, { homes: [], meta: null, detail: null }); login(); } catch (e) { toast(e.message); } }
@@ -119,7 +150,12 @@ document.addEventListener('click', async event => {
 document.addEventListener('input', event => { if (event.target.id === 'search') { state.search = event.target.value; state.page = 1; renderCards(); } });
 document.addEventListener('change', event => {
   const t = event.target;
-  if (['region', 'province', 'sort', 'source'].includes(t.id)) { state[t.id] = t.value; state.page = 1; if (t.id === 'region') { state.province = ''; collection(); } else renderCards(); }
+  if (['region', 'province', 'sort', 'source'].includes(t.id)) {
+    state[t.id] = t.value; state.page = 1;
+    if (t.id === 'region') state.province = '';
+    if (t.id === 'source' && t.value === 'idealista') state.tab = 'active';
+    if (['region', 'source'].includes(t.id)) collection(); else renderCards();
+  }
   if (t.dataset.compare) { const id = t.dataset.compare; if (t.checked && state.compare.size === 3) { t.checked = false; return toast('Choose up to three homes to compare.'); } t.checked ? state.compare.add(id) : state.compare.delete(id); const btn = document.querySelector('[data-tab="compare"]'); if (btn) btn.textContent = `Compare selected (${state.compare.size}/3)`; }
 });
 document.addEventListener('submit', async event => {
@@ -149,8 +185,8 @@ function route() {
   const reference = /^\/references(?:\/(\d{5,12}))?\/?$/.exec(location.pathname);
   if (reference) return reference[1] ? showReference(reference[1]) : showReferences();
   if (state.tab === 'references') state.tab = 'ranked';
-  const match = /^\/(?:properties\/)?((?:AB|MR|DL|IL)\d+)(?:\.html)?$/.exec(location.pathname); match ? showProperty(match[1]) : collection();
+  const match = /^\/(?:properties\/)?((?:AB|MR|DL|IL)\d+)(?:\.html)?$/.exec(location.pathname);
+  if (match) showProperty(match[1]); else { readFilters(); collection(); }
 }
 window.addEventListener('popstate', route);
 (async () => { try { const session = await api('/api/session'); state.user = session.user; state.csrf = session.csrf; header(); await refresh(); route(); } catch (e) { login(e.status === 401 ? '' : e.message); } })();
-
