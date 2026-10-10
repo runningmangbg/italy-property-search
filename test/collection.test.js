@@ -71,3 +71,27 @@ test('over-ceiling references remain on price watch even before detailed scoring
 test('similar names are not sufficient evidence of duplication', () => {
   assert.equal(collection([], [ref('12345678'), ref('22345678')]).length, 2);
 });
+
+test('agency filtering data combines verified aliases, groups references, and preserves original sources', () => {
+  const properties = [home('MR001', { sources: [
+    { agent: 'Monica Bruni · A1143' }, { agent: 'Monica Bruni Real Estate · A2858' },
+    { agent: 'See original advert' }, { agent: 'Idealista professional advertiser — name not captured' },
+  ] }), home('MR002', { source: 'https://www.idealista.it/immobile/22345678/', sources: [
+    { agent: 'Puzielli · PU017' }, { agent: 'Puzielli · PU144' },
+  ] })];
+  const original = JSON.stringify(properties);
+  const result = collection(properties, [ref('12345678', { matches: ['MR001', 'MR002'] })]);
+  assert.equal(result.length, 1);
+  assert.deepEqual(result[0].agencies, [
+    { id: 'immobiliare-puzielli', name: 'Immobiliare Puzielli' },
+    { id: 'monica-bruni-real-estate', name: 'Monica Bruni Real Estate' },
+  ]);
+  assert.equal(JSON.stringify(properties), original);
+  const distinct = collection([home('MR003', { sources: [
+    { agent: 'MajellaCase · 1074 AB SCA' }, { agent: 'Majellacase · 1321' }, { agent: 'Majella Immobiliare' },
+    { agent: 'RE/MAX Centro Casa · 34681015-248' }, { agent: 'RE/MAX People Lanciano' },
+  ] })], [])[0];
+  assert.deepEqual(distinct.agencies.map(a => a.name), ['Majella Immobiliare', 'Majellacase', 'RE/MAX Centro Casa', 'RE/MAX People Lanciano']);
+  assert.deepEqual(collection([], [ref('32345678')])[0].agencies, []);
+  assert.deepEqual(collection([home('MR004', { source: 'https://www.idealista.it/immobile/42345678/', sources: [{ agent: 'Advertiser in Casa.it listing' }, { agent: 'https://www.idealista.it/' }] })], [])[0].agencies, []);
+});

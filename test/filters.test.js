@@ -18,6 +18,65 @@ const sample = [
   home('AB008', 'closed', { referenceIds: ['92345678'] }),
 ];
 
+const agencySample = sample.map(p => ({ ...p, agencies: ['AB001', 'AB003', 'AB004', 'MR001'].includes(p.id)
+  ? [{ id: 'monica-bruni-real-estate', name: 'Monica Bruni Real Estate' }, ...(p.id === 'AB001' ? [{ id: 'immobiliare-puzielli', name: 'Immobiliare Puzielli' }] : [])]
+  : [] }));
+
+test('agency filters combine with source, geography, views and sort while counting physical homes once', async () => {
+  const page = await filterPage(agencySample);
+  assert.match(page.node('#collection-content').innerHTML, /Agency<select id="agency"/);
+  assert.match(page.node('#agency').innerHTML, /Monica Bruni Real Estate \(2\)/);
+  assert.match(page.node('#agency').innerHTML, /Immobiliare Puzielli \(1\)/);
+  await page.change('agency', 'monica-bruni-real-estate');
+  assert.deepEqual(page.ids(), ['AB001', 'AB003']);
+  assert.match(page.node('#cards').innerHTML, /Agencies:<\/strong> Monica Bruni Real Estate · Immobiliare Puzielli/);
+  await page.change('source', 'idealista');
+  assert.deepEqual(page.ids(), ['AB001', 'AB003', 'MR001']);
+  assert.match(page.node('#agency').innerHTML, /Monica Bruni Real Estate \(3\)/);
+  await page.change('province', 'CH');
+  await page.change('sort', 'rank-desc');
+  assert.deepEqual(page.ids(), ['AB003', 'AB001']);
+  assert.equal(page.run('state.page'), 1);
+  await page.view('closed');
+  assert.deepEqual(page.ids(), ['AB004']);
+  await page.view('active');
+  await page.change('agency', 'immobiliare-puzielli');
+  assert.deepEqual(page.ids(), ['AB001']);
+  await page.change('region', 'Marche');
+  assert.deepEqual(page.ids(), []);
+  assert.match(page.node('#agency').innerHTML, /value="immobiliare-puzielli" selected>Immobiliare Puzielli \(0\)/);
+});
+
+test('agency and unknown-agency selection survive reload and dossier return; reset clears them', async () => {
+  const page = await filterPage(agencySample, '/?agency=monica-bruni-real-estate&sort=rank-desc');
+  assert.deepEqual(page.ids(), ['AB003', 'AB001']);
+  const before = page.location.pathname + page.location.search;
+  const restored = await filterPage(agencySample, before);
+  assert.deepEqual(restored.ids(), page.ids());
+  page.location.pathname = '/properties/AB001';
+  await page.fire('click', { id: 'back' });
+  assert.equal(page.location.pathname + page.location.search, before);
+  await page.change('agency', 'unknown');
+  assert.deepEqual(page.ids(), ['AB002']);
+  assert.match(page.node('#cards').innerHTML, /Agency not recorded/);
+  assert.match(page.node('#agency').innerHTML, /value="unknown" selected>Agency not recorded \(1\)/);
+  await page.fire('click', { id: 'clear-filters' });
+  assert.equal(page.run('state.agency'), '');
+  assert.deepEqual(page.ids(), ['AB001', 'AB002', 'AB003']);
+  assert.equal(page.location.search, '');
+});
+
+test('agency labels and obsolete URL selections remain escaped and never broaden results', async () => {
+  const p = home('AB099', 'ranked', { agencies: [{ id: 'safe-id', name: '<img src=x onerror=alert(1)>' }] });
+  const page = await filterPage([p]);
+  assert.match(page.node('#agency').innerHTML, /&lt;img/);
+  assert.doesNotMatch(page.node('#cards').innerHTML, /<img src=x/);
+  const missing = await filterPage([p], '/?agency=%22%3E%3Cscript%3E');
+  assert.deepEqual(missing.ids(), []);
+  assert.match(missing.node('#agency').innerHTML, /Agency no longer recorded \(0\)/);
+  assert.doesNotMatch(missing.node('#agency').innerHTML, /<script>/);
+});
+
 test('Major restoration is a persistent review list across active, held and excluded decisions', async () => {
   const review = { condition: { category: 'major-restoration', scope: 'Ancillary roof only' }, views: { grade: 'excellent' } };
   const properties = sample.map(p => ['AB001', 'AB004', 'AB007', 'AB008'].includes(p.id) ? { ...p, photoReview: review } : p);

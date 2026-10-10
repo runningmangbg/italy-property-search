@@ -18,7 +18,7 @@ function decisionPanel(h) {
 async function showReferences() {
   try {
     await refresh();
-    Object.assign(state, { tab: 'active', source: 'idealista', search: '', region: '', province: '', sort: 'rank', page: 1 });
+    Object.assign(state, { tab: 'active', source: 'idealista', agency: '', search: '', region: '', province: '', sort: 'rank', page: 1 });
     rememberFilters();
     collection();
   } catch (e) { if (e.status === 401) return login(); main.innerHTML = `<p class="error">${esc(e.message)}</p>`; }

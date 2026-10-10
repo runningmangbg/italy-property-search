@@ -1,6 +1,6 @@
 const main = document.querySelector('#main');
 const account = document.querySelector('#account');
-const state = { user: null, csrf: '', properties: [], meta: {}, tab: 'ranked', search: '', region: '', province: '', sort: 'rank', source: '', page: 1, compare: new Set(), detail: null, requestId: null };
+const state = { user: null, csrf: '', properties: [], meta: {}, tab: 'ranked', search: '', region: '', province: '', sort: 'rank', source: '', agency: '', page: 1, compare: new Set(), detail: null, requestId: null };
 const activePools = ['ranked', 'watch', 'verify'];
 const collectionTabs = ['ranked', 'active', 'restoration', 'verify', 'watch', 'favourites', 'hold', 'closed', 'all', 'weekly'];
 const conditionLabels = { light: 'Light visible wear', moderate: 'Some refurbishment', substantial: 'Substantial work', 'major-restoration': 'Major restoration', 'not-assessable': 'Condition not assessable' };
@@ -29,9 +29,26 @@ function provinceKey(value) {
   return Object.entries(provinceNames).find(([code, name]) => text === searchText(code) || text === searchText(name))?.[0] || text;
 }
 function provinceLabel(value) { const code = provinceKey(value); return provinceNames[code] ? `${provinceNames[code]} (${code})` : value; }
-function matchesFilters(p) {
+function matchesOtherFilters(p) {
   const text = [p.id, p.name, p.region, p.administrativeRegion, p.province, provinceLabel(p.province), ...(p.referenceIds || []), ...(p.aliasPropertyIds || [])].join(' ');
   return (!state.source || p.referenceIds?.length > 0) && (!state.region || p.region === state.region) && (!state.province || provinceKey(p.province) === provinceKey(state.province)) && searchText(text).includes(searchText(state.search));
+}
+function matchesFilters(p) {
+  const agencies = p.agencies || [];
+  return matchesOtherFilters(p) && (!state.agency || (state.agency === 'unknown' ? !agencies.length : agencies.some(a => a.id === state.agency)));
+}
+function renderAgencyOptions() {
+  const names = new Map(state.properties.flatMap(p => (p.agencies || []).map(a => [a.id, a.name])));
+  const totals = new Map();
+  const eligible = state.properties.filter(p => inView(p) && matchesOtherFilters(p));
+  for (const p of eligible) for (const id of new Set(p.agencies?.length ? p.agencies.map(a => a.id) : ['unknown'])) totals.set(id, (totals.get(id) || 0) + 1);
+  const options = [...names].sort((a, b) => a[1].localeCompare(b[1], 'en', { sensitivity: 'base' }));
+  options.push(['unknown', 'Agency not recorded']);
+  if (state.agency && state.agency !== 'unknown' && !names.has(state.agency)) options.push([state.agency, 'Agency no longer recorded']);
+  document.querySelector('#agency').innerHTML = `<option value="">All agencies (${eligible.length})</option>` + options.filter(([id]) => totals.has(id) || id === state.agency).map(([id, name]) => `<option value="${esc(id)}"${state.agency === id ? ' selected' : ''}>${esc(name)} (${totals.get(id) || 0})</option>`).join('');
+}
+function agencySummary(p) {
+  return `<p class="agency-summary small muted">${p.agencies?.length ? `<strong>${p.agencies.length > 1 ? 'Agencies' : 'Agency'}:</strong> ${p.agencies.map(a => esc(a.name)).join(' · ')}` : 'Agency not recorded'}</p>`;
 }
 function inView(p, tab = state.tab) {
   if (tab === 'restoration') return needsMajorRestoration(p);
@@ -39,13 +56,13 @@ function inView(p, tab = state.tab) {
 }
 function collectionUrl() {
   const params = new URLSearchParams();
-  for (const [key, value, defaultValue] of [['view', state.tab, 'ranked'], ['source', state.source, ''], ['region', state.region, ''], ['province', state.province, ''], ['sort', state.sort, 'rank'], ['q', state.search, ''], ['page', String(state.page), '1']]) if (value !== defaultValue) params.set(key, value);
+  for (const [key, value, defaultValue] of [['view', state.tab, 'ranked'], ['source', state.source, ''], ['agency', state.agency, ''], ['region', state.region, ''], ['province', state.province, ''], ['sort', state.sort, 'rank'], ['q', state.search, ''], ['page', String(state.page), '1']]) if (value !== defaultValue) params.set(key, value);
   return '/' + (params.size ? '?' + params : '');
 }
 function rememberFilters() { history.replaceState({}, '', collectionUrl()); }
 function readFilters() {
   const params = new URLSearchParams(location.search), view = params.get('view'), source = params.get('source') === 'idealista' ? 'idealista' : '';
-  Object.assign(state, { tab: [...collectionTabs, 'profile', 'compare'].includes(view) ? view : source ? 'active' : 'ranked', source, region: params.get('region') || '', province: params.get('province') || '', search: params.get('q') || '', sort: ['price', 'region', 'rank-desc'].includes(params.get('sort')) ? params.get('sort') : 'rank', page: Math.max(1, Number.parseInt(params.get('page'), 10) || 1) });
+  Object.assign(state, { tab: [...collectionTabs, 'profile', 'compare'].includes(view) ? view : source ? 'active' : 'ranked', source, agency: params.get('agency') || '', region: params.get('region') || '', province: params.get('province') || '', search: params.get('q') || '', sort: ['price', 'region', 'rank-desc'].includes(params.get('sort')) ? params.get('sort') : 'rank', page: Math.max(1, Number.parseInt(params.get('page'), 10) || 1) });
 }
 const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const euros = value => typeof value === 'number' ? new Intl.NumberFormat('en-IE', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(value) : 'Price unverified';
@@ -87,7 +104,7 @@ function collection() {
   if (state.tab === 'profile') return renderProfile();
   if (state.tab === 'compare') return renderCompare();
   document.querySelector('#collection-content').innerHTML = `${state.tab === 'restoration' ? '<p class="notice">Properties with severe visible deterioration, a major unfinished shell, or existing evidence of full restoration needs. Check the scope: sometimes the concern is an annex or separate ruin. This review list includes held and excluded homes, with your decisions preserved. Assessments are provisional and need a survey.</p>' : ''}${state.tab === 'verify' ? '<p class="notice">These homes are awaiting assessment using the same criteria as the ranked collection. Their scores will be added during the weekly update.</p>' : ''}${state.tab === 'watch' ? '<p class="notice">These homes are either above the €260,000 purchase ceiling or do not yet meet the strong-case budget gate. They retain their assessments but have no active rank. Comments and favourites do not change budget eligibility.</p>' : ''}
-  <div class="filters"><label>Find a home<input id="search" type="search" placeholder="Town, property name or ID" value="${esc(state.search)}"></label><label>Region<select id="region"><option value="">All search areas</option>${[...new Set(state.properties.map(p => p.region))].sort().map(r => `<option${state.region === r ? ' selected' : ''}>${esc(r)}</option>`).join('')}</select></label><label>Province<select id="province"><option value="">All provinces</option>${provinces.map(([code, label]) => `<option value="${esc(code)}"${provinceKey(state.province) === code ? ' selected' : ''}>${esc(label)}</option>`).join('')}</select></label><label>Source<select id="source"><option value="">All sources</option><option value="idealista"${state.source === 'idealista' ? ' selected' : ''}>My Idealista list</option></select></label><label>Sort by<select id="sort"><option value="rank">Highest ranked first</option><option value="rank-desc">Lowest ranked first</option><option value="price">Lowest price</option><option value="region">Region & province</option></select></label></div><p id="filter-context" class="small muted"></p><div class="results-line"><span id="result-count" role="status" aria-live="polite"></span><span><button class="link-button" data-tab="compare">Compare selected (${state.compare.size}/3)</button> · <button class="link-button" id="clear-filters">Reset filters</button></span></div><div id="pagination-top"></div><div id="cards" class="grid"></div><div id="pagination"></div>`;
+  <div class="filters"><label>Find a home<input id="search" type="search" placeholder="Town, property name or ID" value="${esc(state.search)}"></label><label>Region<select id="region"><option value="">All search areas</option>${[...new Set(state.properties.map(p => p.region))].sort().map(r => `<option${state.region === r ? ' selected' : ''}>${esc(r)}</option>`).join('')}</select></label><label>Province<select id="province"><option value="">All provinces</option>${provinces.map(([code, label]) => `<option value="${esc(code)}"${provinceKey(state.province) === code ? ' selected' : ''}>${esc(label)}</option>`).join('')}</select></label><label>Source<select id="source"><option value="">All sources</option><option value="idealista"${state.source === 'idealista' ? ' selected' : ''}>My Idealista list</option></select></label><label>Sort by<select id="sort"><option value="rank">Highest ranked first</option><option value="rank-desc">Lowest ranked first</option><option value="price">Lowest price</option><option value="region">Region & province</option></select></label><label class="agency-filter">Agency<select id="agency" aria-label="Agency"></select></label></div><p id="filter-context" class="small muted"></p><div class="results-line"><span id="result-count" role="status" aria-live="polite"></span><span><button class="link-button" data-tab="compare">Compare selected (${state.compare.size}/3)</button> · <button class="link-button" id="clear-filters">Reset filters</button></span></div><div id="pagination-top"></div><div id="cards" class="grid"></div><div id="pagination"></div>`;
   document.querySelector('#sort').value = state.sort;
   renderCards();
 }
@@ -100,6 +117,7 @@ function matches() {
   return p;
 }
 function renderCards() {
+  renderAgencyOptions();
   const properties = matches(), pages = Math.max(1, Math.ceil(properties.length / 4));
   state.page = Math.min(state.page, pages);
   rememberFilters();
@@ -121,7 +139,7 @@ function idealistaLinks(p) {
 function card(p) {
   const photo = p.photos?.[0];
   const preview = !photo && p.referencePhoto;
-  return `<article class="card"><a class="card-image" href="/properties/${esc(p.id)}" data-property="${esc(p.id)}">${photo ? `<img src="/api/media/${esc(p.id)}/0" alt="${esc(photo.caption)}" loading="lazy">` : preview ? `<img src="${url(preview.url)}" alt="${esc(preview.alt || p.name)}" referrerpolicy="no-referrer" loading="lazy">` : '<div class="no-photo">Listing photographs unavailable</div>'}<span class="rank">${p.rank ? '#' + p.rank : esc(poolTitle(p.pool) || p.band)}</span>${p.favourite ? '<span class="fav-badge" aria-label="Favourite">♥</span>' : ''}</a><div class="card-body"><div class="card-top"><span>${esc(p.region)} · ${esc(p.province)}</span><span>${esc(p.id)}</span></div><h2><a href="/properties/${esc(p.id)}" data-property="${esc(p.id)}">${esc(p.name)}</a></h2><div class="price-row"><span class="price">${euros(p.price)}</span><span class="score">${p.score ?? '—'}<small> / 100 fit</small></span></div><span class="chip ${p.price > 225000 ? 'warning' : 'green'}">${esc(p.band)}</span>${p.rejected ? '<span class="chip warning">Rejected</span>' : ''}${p.referenceIds?.length ? '<span class="chip">Your Idealista list</span>' : ''}${p.removedFromSharedList ? '<span class="chip warning">Removed from shared list</span>' : ''}${p.status !== 'Open' ? `<span class="chip">${esc(p.status)}</span>` : ''}${photoReviewChips(p)}${needsMajorRestoration(p) ? `<p class="small"><strong>Work scope:</strong> ${esc(p.photoReview.condition.scope)}</p>` : ''}${p.pool === 'watch' ? `<p class="small muted">${p.reductionToCeiling > 0 ? `${euros(p.reductionToCeiling)} reduction to reach the ceiling` : esc(p.budgetGateReason || 'Unranked: unusually strong case or materially lower development burden not yet established.')}</p>` : ''}<dl class="card-facts"><div><dt>Buildings</dt><dd>${esc(p.size || 'Not verified')}</dd></div><div><dt>Land</dt><dd>${esc(p.land || 'Not verified')}</dd></div></dl><p class="small muted">${short(p.why)}</p>${idealistaLinks(p)}<div class="card-actions"><a class="btn secondary" href="/properties/${esc(p.id)}" data-property="${esc(p.id)}">View dossier</a><label class="check-label small"><input type="checkbox" data-compare="${esc(p.id)}" ${state.compare.has(p.id) ? 'checked' : ''}>Compare</label></div></div></article>`;
+  return `<article class="card"><a class="card-image" href="/properties/${esc(p.id)}" data-property="${esc(p.id)}">${photo ? `<img src="/api/media/${esc(p.id)}/0" alt="${esc(photo.caption)}" loading="lazy">` : preview ? `<img src="${url(preview.url)}" alt="${esc(preview.alt || p.name)}" referrerpolicy="no-referrer" loading="lazy">` : '<div class="no-photo">Listing photographs unavailable</div>'}<span class="rank">${p.rank ? '#' + p.rank : esc(poolTitle(p.pool) || p.band)}</span>${p.favourite ? '<span class="fav-badge" aria-label="Favourite">♥</span>' : ''}</a><div class="card-body"><div class="card-top"><span>${esc(p.region)} · ${esc(p.province)}</span><span>${esc(p.id)}</span></div><h2><a href="/properties/${esc(p.id)}" data-property="${esc(p.id)}">${esc(p.name)}</a></h2><div class="price-row"><span class="price">${euros(p.price)}</span><span class="score">${p.score ?? '—'}<small> / 100 fit</small></span></div><span class="chip ${p.price > 225000 ? 'warning' : 'green'}">${esc(p.band)}</span>${p.rejected ? '<span class="chip warning">Rejected</span>' : ''}${p.referenceIds?.length ? '<span class="chip">Your Idealista list</span>' : ''}${p.removedFromSharedList ? '<span class="chip warning">Removed from shared list</span>' : ''}${p.status !== 'Open' ? `<span class="chip">${esc(p.status)}</span>` : ''}${photoReviewChips(p)}${needsMajorRestoration(p) ? `<p class="small"><strong>Work scope:</strong> ${esc(p.photoReview.condition.scope)}</p>` : ''}${p.pool === 'watch' ? `<p class="small muted">${p.reductionToCeiling > 0 ? `${euros(p.reductionToCeiling)} reduction to reach the ceiling` : esc(p.budgetGateReason || 'Unranked: unusually strong case or materially lower development burden not yet established.')}</p>` : ''}<dl class="card-facts"><div><dt>Buildings</dt><dd>${esc(p.size || 'Not verified')}</dd></div><div><dt>Land</dt><dd>${esc(p.land || 'Not verified')}</dd></div></dl><p class="small muted">${short(p.why)}</p>${agencySummary(p)}${idealistaLinks(p)}<div class="card-actions"><a class="btn secondary" href="/properties/${esc(p.id)}" data-property="${esc(p.id)}">View dossier</a><label class="check-label small"><input type="checkbox" data-compare="${esc(p.id)}" ${state.compare.has(p.id) ? 'checked' : ''}>Compare</label></div></div></article>`;
 }
 function renderWeekly() {
   const runs = state.meta.weeklyRuns?.runs || [];
@@ -169,7 +187,7 @@ document.addEventListener('click', async event => {
   else if (target.id === 'back' || target.classList.contains('brand')) { event.preventDefault(); await refresh().catch(() => {}); navigate(); }
   else if (target.dataset.tab) { state.tab = target.dataset.tab; state.page = 1; if (state.tab === 'references') navigateReference(); else { history.pushState({}, '', collectionUrl()); collection(); } }
   else if (target.dataset.page) { state.page = Number(target.dataset.page); renderCards(); document.querySelector('.filters').scrollIntoView({ block: 'start' }); }
-  else if (target.id === 'clear-filters') { Object.assign(state, { search: '', region: '', province: '', sort: 'rank', source: '', page: 1 }); collection(); }
+  else if (target.id === 'clear-filters') { Object.assign(state, { search: '', region: '', province: '', sort: 'rank', source: '', agency: '', page: 1 }); collection(); }
   else if (target.id === 'logout') { try { await api('/api/logout', { method: 'POST' }); state.properties = []; state.meta = {}; state.detail = null; Object.assign(referenceState, { homes: [], meta: null, detail: null }); login(); } catch (e) { toast(e.message); } }
   else if (target.dataset.photo !== undefined) { const n = Number(target.dataset.photo), p = state.detail.property, dialog = document.querySelector('#lightbox'); dialog.querySelector('img').src = `/api/media/${p.id}/${n}`; dialog.querySelector('img').alt = p.photos[n].caption; dialog.querySelector('p').textContent = p.photos[n].caption; dialog.showModal(); }
   else if (target.classList.contains('lightbox-close')) document.querySelector('#lightbox').close();
@@ -178,7 +196,7 @@ document.addEventListener('click', async event => {
 document.addEventListener('input', event => { if (event.target.id === 'search') { state.search = event.target.value; state.page = 1; renderCards(); } });
 document.addEventListener('change', event => {
   const t = event.target;
-  if (['region', 'province', 'sort', 'source'].includes(t.id)) {
+  if (['region', 'province', 'sort', 'source', 'agency'].includes(t.id)) {
     state[t.id] = t.value; state.page = 1;
     if (t.id === 'region') state.province = '';
     if (t.id === 'source' && t.value === 'idealista' && state.tab !== 'restoration') state.tab = 'active';

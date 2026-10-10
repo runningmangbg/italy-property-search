@@ -11,7 +11,7 @@ import { budget } from '../server/domain.js';
 const secret = 'test-import-authorization-token-long-enough';
 let pg, db, app, alice, bob, csrfA, csrfB;
 const manifest = (revision, price=198000) => ({ sourceRevision:revision, observedAt:'2026-09-26T19:19:16Z', properties:[
-  { id:'AB001', name:'Test farmhouse', region:'Abruzzo', province:'TE', price, score:72, sources:[{url:'https://example.com/a',observed_price:198000}] },
+  { id:'AB001', name:'Test farmhouse', region:'Abruzzo', province:'TE', price, score:72, sources:[{url:'https://example.com/a',agent:'Monica Bruni · TEST1',observed_price:198000}] },
   { id:'MR001', name:'Test price watch', region:'Marche', province:'AN', price:280000, score:80 },
 ] });
 before(async () => {
@@ -39,6 +39,8 @@ test('imports preserve IDs, watch separation, revisions, and shared decisions',a
   let properties=(await alice.get('/api/properties')).body.properties;
   assert.equal(properties.find(p=>p.id==='MR001').rank,null);
   assert.equal(properties.find(p=>p.id==='AB001').rank,1);
+  assert.deepEqual(properties.find(p=>p.id==='AB001').agencies,[{id:'monica-bruni-real-estate',name:'Monica Bruni Real Estate'}]);
+  assert.equal(properties.find(p=>p.id==='AB001').sources,undefined); // Agency summaries survive the private list projection.
   const requestId=randomUUID();
   const decision={requestId,revision:0,status:'Closed',favourite:true,comment:'Owner space is too small.'};
   await alice.post('/api/properties/AB001/feedback').set('X-CSRF-Token',csrfA).send(decision).expect(200);
