@@ -2,7 +2,7 @@ const main = document.querySelector('#main');
 const account = document.querySelector('#account');
 const state = { user: null, csrf: '', properties: [], meta: {}, tab: 'ranked', search: '', region: '', province: '', sort: 'rank', source: '', agency: '', page: 1, compare: new Set(), detail: null, requestId: null };
 const activePools = ['ranked', 'watch', 'verify'];
-const collectionTabs = ['ranked', 'active', 'restoration', 'verify', 'watch', 'favourites', 'hold', 'closed', 'all', 'weekly'];
+const collectionTabs = ['ranked', 'active', 'restoration', 'verify', 'watch', 'interested', 'favourites', 'hold', 'closed', 'all', 'weekly'];
 const conditionLabels = { light: 'Light visible wear', moderate: 'Some refurbishment', substantial: 'Substantial work', 'major-restoration': 'Major restoration', 'not-assessable': 'Condition not assessable' };
 const viewLabels = { 'ordinary-limited': 'Ordinary / limited', attractive: 'Attractive', excellent: 'Excellent', spectacular: 'Spectacular', 'not-assessable': 'Not assessable' };
 const needsMajorRestoration = p => p.photoReview?.condition?.category === 'major-restoration';
@@ -51,6 +51,7 @@ function agencySummary(p) {
   return `<p class="agency-summary small muted">${p.agencies?.length ? `<strong>${p.agencies.length > 1 ? 'Agencies' : 'Agency'}:</strong> ${p.agencies.map(a => esc(a.name)).join(' · ')}` : 'Agency not recorded'}</p>`;
 }
 function inView(p, tab = state.tab) {
+  if (tab === 'interested') return p.status === 'Interested' && activePools.includes(p.pool);
   if (tab === 'restoration') return needsMajorRestoration(p);
   return tab === 'all' || (tab === 'active' ? activePools.includes(p.pool) : tab === 'favourites' ? p.favourite && activePools.includes(p.pool) : tab === 'closed' ? ['closed', 'excluded', 'dropped', 'inactive'].includes(p.pool) : p.pool === tab);
 }
@@ -85,10 +86,10 @@ function login(error = '') {
   main.innerHTML = `<section class="login"><div class="eyebrow">Peter & Rebecka’s collection</div><h1>Welcome home.</h1><p class="muted">Sign in to explore the houses and share your thoughts.</p><form id="login"><label>Your name<input name="username" autocomplete="username" required placeholder="Peter or Rebecka"></label><label>Password<input type="password" name="password" autocomplete="current-password" required></label><div id="login-error" class="${error ? 'error' : ''}" role="alert">${esc(error)}</div><button class="btn" type="submit">Open the collection</button></form></section>`;
 }
 async function refresh() { const data = await api('/api/properties'); state.properties = data.properties; state.meta = data.meta; }
-function poolTitle(tab) { return ({ references: 'Idealista finds', ranked: 'Ranked homes', active: 'Active homes', restoration: 'Major restoration', watch: 'Price watch', favourites: 'Favourites', hold: 'On hold', closed: 'Excluded', excluded: 'Excluded', dropped: 'Removed from your list', inactive: 'Unavailable', verify: 'To evaluate', all: 'All homes & history', weekly: 'Search updates', compare: 'Compare homes', profile: 'Our search brief' })[tab]; }
+function poolTitle(tab) { return ({ references: 'Idealista finds', ranked: 'Ranked homes', active: 'Active homes', restoration: 'Major restoration', watch: 'Price watch', interested: 'Interested', favourites: 'Favourites', hold: 'On hold', closed: 'Excluded', excluded: 'Excluded', dropped: 'Removed from your list', inactive: 'Unavailable', verify: 'To evaluate', all: 'All homes & history', weekly: 'Search updates', compare: 'Compare homes', profile: 'Our search brief' })[tab]; }
 function counts(properties = state.properties) {
-  const c = { ranked: 0, active: 0, restoration: properties.filter(needsMajorRestoration).length, watch: 0, favourites: 0, hold: 0, closed: 0, verify: 0, all: properties.length };
-  for (const p of properties) { if (c[p.pool] !== undefined) c[p.pool]++; if (['excluded', 'dropped', 'inactive'].includes(p.pool)) c.closed++; if (activePools.includes(p.pool)) { c.active++; if (p.favourite) c.favourites++; } }
+  const c = { ranked: 0, active: 0, restoration: properties.filter(needsMajorRestoration).length, watch: 0, interested: 0, favourites: 0, hold: 0, closed: 0, verify: 0, all: properties.length };
+  for (const p of properties) { if (c[p.pool] !== undefined) c[p.pool]++; if (['excluded', 'dropped', 'inactive'].includes(p.pool)) c.closed++; if (activePools.includes(p.pool)) { c.active++; if (p.status === 'Interested') c.interested++; if (p.favourite) c.favourites++; } }
   return c;
 }
 function collection() {
@@ -124,7 +125,7 @@ function renderCards() {
   const c = counts(state.properties.filter(matchesFilters));
   document.querySelectorAll('[data-count]').forEach(el => { el.textContent = c[el.dataset.count]; });
   const explanation = state.source && state.tab === 'active' && state.sort === 'rank' && c.verify ? '<span class="filter-help">Ranked homes appear first. Tap awaiting evaluation to see the other saved homes directly.</span>' : '';
-  document.querySelector('#filter-context').innerHTML = state.source ? `<strong>My Idealista list · ${c.active} active homes</strong><span class="filter-shortcuts"><button class="link-button" data-tab="active"${state.tab === 'active' ? ' aria-pressed="true"' : ''}>All active</button><button class="link-button" data-tab="ranked"${state.tab === 'ranked' ? ' aria-pressed="true"' : ''}>${c.ranked} ranked</button><button class="link-button" data-tab="verify"${state.tab === 'verify' ? ' aria-pressed="true"' : ''}>${c.verify} awaiting evaluation</button>${c.watch ? `<button class="link-button" data-tab="watch">${c.watch} on price watch</button>` : ''}</span>${explanation}` : 'Filters apply to the selected view. Active homes includes ranked, awaiting-evaluation and price-watch homes. Favourites contains homes you have marked on this website.';
+  document.querySelector('#filter-context').innerHTML = state.source ? `<strong>My Idealista list · ${c.active} active homes</strong><span class="filter-shortcuts"><button class="link-button" data-tab="active"${state.tab === 'active' ? ' aria-pressed="true"' : ''}>All active</button><button class="link-button" data-tab="ranked"${state.tab === 'ranked' ? ' aria-pressed="true"' : ''}>${c.ranked} ranked</button><button class="link-button" data-tab="verify"${state.tab === 'verify' ? ' aria-pressed="true"' : ''}>${c.verify} awaiting evaluation</button>${c.watch ? `<button class="link-button" data-tab="watch">${c.watch} on price watch</button>` : ''}</span>${explanation}` : 'Filters apply to the selected view. Active homes includes ranked, awaiting-evaluation and price-watch homes. Interested shows active homes with your shared Interested status. Favourites contains homes you have marked on this website.';
   const shown = properties.slice((state.page - 1) * 4, state.page * 4);
   document.querySelector('#result-count').textContent = `${properties.length} ${properties.length === 1 ? 'home' : 'homes'} in ${poolTitle(state.tab)}${properties.length ? ` · ${(state.page - 1) * 4 + 1}–${Math.min(state.page * 4, properties.length)}` : ''}`;
   document.querySelector('#cards').innerHTML = shown.length ? shown.map(card).join('') : '<div class="empty"><h2>No homes in this view.</h2><p class="muted">Try another view or clear the filters.</p></div>';
@@ -199,7 +200,7 @@ document.addEventListener('change', event => {
   if (['region', 'province', 'sort', 'source', 'agency'].includes(t.id)) {
     state[t.id] = t.value; state.page = 1;
     if (t.id === 'region') state.province = '';
-    if (t.id === 'source' && t.value === 'idealista' && state.tab !== 'restoration') state.tab = 'active';
+    if (t.id === 'source' && t.value === 'idealista' && !['restoration', 'interested'].includes(state.tab)) state.tab = 'active';
     if (['region', 'source'].includes(t.id)) collection(); else renderCards();
   }
   if (t.dataset.compare) { const id = t.dataset.compare; if (t.checked && state.compare.size === 3) { t.checked = false; return toast('Choose up to three homes to compare.'); } t.checked ? state.compare.add(id) : state.compare.delete(id); const btn = document.querySelector('[data-tab="compare"]'); if (btn) btn.textContent = `Compare selected (${state.compare.size}/3)`; }

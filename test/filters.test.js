@@ -277,3 +277,30 @@ test('every saved-home card links directly to its Idealista advert, independentl
   assert.equal(page.run('idealistaLinks({referenceIds: []})'), '');
   assert.equal(page.run('idealistaLinks({referenceIds: ["bad-id"]})'), '');
 });
+
+
+test('Interested view combines filters and persists without restoring excluded homes', async () => {
+  const properties = agencySample.map(p => ({ ...p, status: p.id === 'AB002' ? 'Open' : 'Interested' }));
+  const page = await filterPage(properties);
+  await page.view('interested');
+  assert.deepEqual(page.ids(), ['AB001', 'AB003', 'IL32345678', 'MR001']);
+  assert.equal(page.run('counts().interested'), 4);
+  assert.match(page.node('#main').innerHTML, /data-tab="interested"/);
+  await page.change('source', 'idealista');
+  assert.equal(page.run('state.tab'), 'interested');
+  await page.change('agency', 'monica-bruni-real-estate');
+  await page.change('region', 'Abruzzo');
+  await page.change('sort', 'rank-desc');
+  assert.deepEqual(page.ids(), ['AB003', 'AB001']);
+  const before = page.location.pathname + page.location.search;
+  const reloaded = await filterPage(properties, before);
+  assert.deepEqual(reloaded.ids(), page.ids());
+  page.location.pathname = '/properties/AB001';
+  await page.fire('click', { id: 'back' });
+  assert.equal(page.location.pathname + page.location.search, before);
+  await page.input('no matching home');
+  assert.deepEqual(page.ids(), []);
+  await page.fire('click', { id: 'clear-filters' });
+  assert.equal(page.location.search, '?view=interested');
+  assert.equal(page.ids().length, 4);
+});
