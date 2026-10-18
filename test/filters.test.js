@@ -77,17 +77,17 @@ test('agency labels and obsolete URL selections remain escaped and never broaden
   assert.doesNotMatch(missing.node('#agency').innerHTML, /<script>/);
 });
 
-test('Major restoration is a persistent review list across active, held and excluded decisions', async () => {
+test('Major restoration is a persistent review list across active and held decisions, excluding archived homes', async () => {
   const review = { condition: { category: 'major-restoration', scope: 'Ancillary roof only' }, views: { grade: 'excellent' } };
   const properties = sample.map(p => ['AB001', 'AB004', 'AB007', 'AB008'].includes(p.id) ? { ...p, photoReview: review } : p);
   const page = await filterPage(properties, '/?view=restoration');
-  assert.deepEqual(page.ids(), ['AB001', 'AB004', 'AB007', 'AB008']);
-  assert.equal(page.run('counts().restoration'), 4);
+  assert.deepEqual(page.ids(), ['AB001', 'AB007']);
+  assert.equal(page.run('counts().restoration'), 2);
   assert.match(page.node('#cards').innerHTML, /Ancillary roof only/);
-  assert.match(page.node('#cards').innerHTML, /Rejected/);
+  assert.doesNotMatch(page.node('#cards').innerHTML, /Rejected/);
   await page.change('source', 'idealista');
   assert.equal(page.run('state.tab'), 'restoration');
-  assert.deepEqual(page.ids(), ['AB001', 'AB004', 'AB007', 'AB008']);
+  assert.deepEqual(page.ids(), ['AB001', 'AB007']);
   const restored = await filterPage(properties, page.location.pathname + page.location.search);
   assert.deepEqual(restored.ids(), page.ids());
   await page.view('ranked');
@@ -303,4 +303,29 @@ test('Interested view combines filters and persists without restoring excluded h
   await page.fire('click', { id: 'clear-filters' });
   assert.equal(page.location.search, '?view=interested');
   assert.equal(page.ids().length, 4);
+});
+
+
+test('closed homes appear only in Closed & excluded, including after reload and reopening', async () => {
+  const closed = home('AB099', 'closed', { status: 'Closed', favourite: true,
+    photoReview: { condition: { category: 'major-restoration' } } });
+  const page = await filterPage([...sample, closed]);
+  for (const tab of ['ranked', 'active', 'restoration', 'verify', 'watch', 'interested', 'favourites', 'hold', 'all']) {
+    await page.view(tab);
+    assert.ok(!page.ids().includes('AB099'), tab);
+    assert.equal(page.run(`counts()[${JSON.stringify(tab)}]`), page.ids().length);
+  }
+  await page.view('closed');
+  assert.ok(page.ids().includes('AB099'));
+  const restored = await filterPage([...sample, closed], '/?view=all');
+  assert.ok(!restored.ids().includes('AB099'));
+  page.run("state.compare.add('AB099')");
+  await page.view('compare');
+  assert.equal(page.run("state.compare.has('AB099')"), false);
+  assert.doesNotMatch(page.node('#collection-content').innerHTML, /Home AB099/);
+  page.run("state.properties.find(p => p.id === 'AB099').status = 'Interested'; state.properties.find(p => p.id === 'AB099').pool = 'ranked'");
+  await page.view('interested');
+  assert.ok(page.ids().includes('AB099'));
+  await page.view('closed');
+  assert.ok(!page.ids().includes('AB099'));
 });
