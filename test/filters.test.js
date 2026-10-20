@@ -77,17 +77,17 @@ test('agency labels and obsolete URL selections remain escaped and never broaden
   assert.doesNotMatch(missing.node('#agency').innerHTML, /<script>/);
 });
 
-test('Major restoration is a persistent review list across active and held decisions, excluding archived homes', async () => {
+test('Major restoration shows only open homes, excluding held and archived homes', async () => {
   const review = { condition: { category: 'major-restoration', scope: 'Ancillary roof only' }, views: { grade: 'excellent' } };
   const properties = sample.map(p => ['AB001', 'AB004', 'AB007', 'AB008'].includes(p.id) ? { ...p, photoReview: review } : p);
   const page = await filterPage(properties, '/?view=restoration');
-  assert.deepEqual(page.ids(), ['AB001', 'AB007']);
-  assert.equal(page.run('counts().restoration'), 2);
+  assert.deepEqual(page.ids(), ['AB001']);
+  assert.equal(page.run('counts().restoration'), 1);
   assert.match(page.node('#cards').innerHTML, /Ancillary roof only/);
   assert.doesNotMatch(page.node('#cards').innerHTML, /Rejected/);
   await page.change('source', 'idealista');
   assert.equal(page.run('state.tab'), 'restoration');
-  assert.deepEqual(page.ids(), ['AB001', 'AB007']);
+  assert.deepEqual(page.ids(), ['AB001']);
   const restored = await filterPage(properties, page.location.pathname + page.location.search);
   assert.deepEqual(restored.ids(), page.ids());
   await page.view('ranked');
@@ -328,4 +328,41 @@ test('closed homes appear only in Closed & excluded, including after reload and 
   assert.ok(page.ids().includes('AB099'));
   await page.view('closed');
   assert.ok(!page.ids().includes('AB099'));
+});
+
+test('reviewed statuses leave every browsing queue while scores, ranks and status views remain intact', async () => {
+  const review = { condition: { category: 'major-restoration' } };
+  const properties = [];
+  for (const pool of ['ranked', 'watch', 'verify']) {
+    for (const status of ['Open', 'Interested', 'On hold', 'Closed']) {
+      properties.push(home(`${pool}-${status}`, pool, { status, rank: pool === 'ranked' ? properties.length + 1 : null,
+        favourite: true, referenceIds: ['12345678'], agencies: [{ id: 'test-agent', name: 'Test Agent' }], photoReview: review }));
+    }
+  }
+  const before = JSON.stringify(properties);
+  const page = await filterPage(properties);
+  for (const tab of ['ranked', 'active', 'watch', 'verify', 'restoration', 'favourites', 'all']) {
+    await page.view(tab);
+    assert.ok(page.ids().length > 0, tab);
+    assert.ok(page.ids().every(id => id.endsWith('-Open')), tab);
+    assert.equal(page.run(`counts()[${JSON.stringify(tab)}]`), page.ids().length);
+    assert.match(page.node('#agency').innerHTML, new RegExp(`Test Agent \\(${page.ids().length}\\)`));
+  }
+  for (const [tab, status] of [['interested', 'Interested'], ['hold', 'On hold'], ['closed', 'Closed']]) {
+    await page.view(tab);
+    await page.change('source', 'idealista');
+    assert.equal(page.run('state.tab'), tab);
+    assert.equal(page.ids().length, 3);
+    assert.ok(page.ids().every(id => id.endsWith('-' + status)));
+    const reloaded = await filterPage(properties, page.location.pathname + page.location.search);
+    assert.deepEqual(reloaded.ids(), page.ids());
+  }
+  assert.equal(JSON.stringify(properties), before);
+  for (const pool of ['ranked', 'watch', 'verify']) {
+    page.run(`state.properties.find(p => p.id === '${pool}-Interested').status = 'Open'`);
+    await page.view(pool);
+    assert.ok(page.ids().includes(`${pool}-Interested`));
+  }
+  assert.equal(properties.find(p => p.id === 'ranked-Interested').rank, 2);
+  assert.equal(properties.find(p => p.id === 'ranked-Interested').score, 70);
 });
