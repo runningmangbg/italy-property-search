@@ -35,6 +35,16 @@ Use `Authorization: Bearer <IMPORT_TOKEN>` over HTTPS:
 
 Photos are stored in `media`. Use a PostgreSQL backup for a complete restore; the JSON export does not contain photo bytes. Preserve the original source media.
 
+The full JSON export streams table rows in batches of 25 using a read-only,
+repeatable-read transaction. Its existing keys and complete history are retained;
+clients must download and successfully parse the entire response before using it.
+An HTTP 200 alone does not prove completion: a query failure or disconnected
+download produces an incomplete stream, never a valid partial snapshot. Save to a
+temporary private file and replace the previous export only after validation.
+Only one full export runs per application instance; a concurrent request receives
+503 with `Retry-After: 30`. Keep the last good export and retry later. Routine
+feedback checks can continue through `/api/feedback-export`.
+
 Photo refreshes preserve saved photos when the incoming photo list is omitted, null or empty. A non-empty list replaces the gallery metadata, so upload its matching image bytes first. Keep each source listing URL and a factual caption; an exact-property preview may be used when the full gallery cannot be retrieved. A blank gallery must not be treated as a completed photo import. For Idealista, verify whether an AI label is actually visible for that image: page text can include hidden `ai-photo-badge-detail` placeholders even when the displayed photograph has no such label. Do not classify an image as AI-modified from that hidden text alone.
 
 ## Handbook
@@ -64,7 +74,7 @@ Closed and On hold remain excluded after price changes. Comments guide preferenc
 
 ## Service limits
 
-The development database expires on 26 October 2026. Upgrade or migrate before then, preserving new feedback. No paid plan is enabled automatically. Free web services may have cold starts. Monitor `/api/health` and Render logs without logging credentials or private comments.
+Check the current database plan and expiry in Render before reporting an expiry or proposing an upgrade. The original free-database expiry estimate is obsolete after a plan change. Do not enable or change paid plans without owner approval. Free web services may have cold starts. Monitor `/api/health` and Render logs without logging credentials or private comments.
 
 The service itself sends no email and contacts no agents. An authorised hourly assistant task delivers the joint-rejection queue through Peter's connected Gmail account. Screening judgments alone never authorise removal emails.
 

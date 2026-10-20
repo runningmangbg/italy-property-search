@@ -8,6 +8,7 @@ import { allProperties, digest, importProperties } from './domain.js';
 import { token, passwordMatches, sameSecret, hashPassword } from './auth.js';
 import { installHandbook } from './handbook.js';
 import { installReferences } from './references.js';
+import { createExportHandler } from './export.js';
 
 const root = path.dirname(fileURLToPath(new URL('../package.json', import.meta.url)));
 const pid = z.string().regex(/^(?:(?:AB|MR|DL)\d{3,6}|IL\d{5,12})$/);
@@ -120,13 +121,7 @@ export function createApp({ db, users = [], importToken = '', production = false
     await db.query('INSERT INTO media(property_id,image_index,mime_type,bytes,content_hash) VALUES($1,$2,$3,$4,$5) ON CONFLICT(property_id,image_index) DO UPDATE SET mime_type=EXCLUDED.mime_type,bytes=EXCLUDED.bytes,content_hash=EXCLUDED.content_hash', [req.params.id, n, mime, b, digest(b)]);
     res.json({ saved: true });
   });
-  app.get('/api/export', importer, async (req, res) => {
-    const result = {};
-    for (const table of ['properties', 'decisions', 'feedback_events', 'property_snapshots', 'project_meta', 'import_runs', 'handbook_files', 'reference_homes', 'reference_notes', 'reference_decisions', 'reference_decision_events', 'reference_removal_emails', 'reference_membership_events']) result[table] = (await db.query(`SELECT * FROM ${table}`)).rows;
-    result.collection = await allProperties(db);
-    result.exportedAt = new Date().toISOString();
-    res.json(result);
-  });
+  app.get('/api/export', importer, createExportHandler(db));
   app.get('/api/feedback-export', importer, async (req, res) => res.json({ decisions: (await db.query('SELECT * FROM decisions ORDER BY property_id')).rows, events: (await db.query('SELECT * FROM feedback_events ORDER BY id')).rows, referenceDecisions: (await db.query('SELECT * FROM reference_decisions ORDER BY reference_id,user_id')).rows, referenceEvents: (await db.query('SELECT * FROM reference_decision_events ORDER BY id')).rows, referenceNotes: (await db.query('SELECT * FROM reference_notes ORDER BY id')).rows }));
   installHandbook(app, { db, importer });
   installReferences(app, { db, session, csrf, importer });
