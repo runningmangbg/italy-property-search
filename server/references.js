@@ -2,6 +2,7 @@ import express from 'express';
 import { z } from 'zod';
 import { digest } from './domain.js';
 import { referenceReviews, installReferenceDecisions } from './reference-decisions.js';
+import { earliestListingDay, listingHistory } from './listing-age.js';
 
 const referenceId = z.string().regex(/^\d{5,12}$/);
 const listingUrl = z.url().refine(v => /^https:\/\/www\.idealista\.it\/immobile\/\d{5,12}\/$/.test(v));
@@ -11,6 +12,7 @@ const homeSchema = z.object({
   price: z.number().positive().nullable(), region: z.string().max(80), province: z.string().max(80),
   position: z.number().int().nonnegative(), area: z.string().max(300), land: z.string().max(500),
   checkedAt: z.iso.datetime({ offset: true }).optional(),
+  publishedAt: z.iso.date().optional(), firstSeenAt: z.iso.date().optional(),
   availability: z.enum(['advertised', 'unknown', 'sold', 'withdrawn', 'removed', 'unavailable']).optional(),
   availabilityCheckedAt: z.iso.datetime({ offset: true }).optional(),
   availabilityEvidence: text.optional(),
@@ -40,13 +42,15 @@ export function installReferences(app, { db, session, csrf, importer }) {
     res.json({ homes, meta });
   });
   app.get('/api/references/:id', session, async (req, res) => {
-    const home = (await db.query('SELECT data,listed FROM reference_homes WHERE id=$1', [req.params.id])).rows[0];
+    const home = (await db.query(`SELECT data,listed,
+      (SELECT min(observed_at) FROM reference_membership_events WHERE reference_id=reference_homes.id AND listed=true) AS first_observed_at
+      FROM reference_homes WHERE id=$1`, [req.params.id])).rows[0];
     if (!home) return res.status(404).json({ error: 'Saved home not found.' });
     const before = req.query.before === undefined ? null : Number(req.query.before);
     if (before !== null && (!Number.isSafeInteger(before) || before < 1)) return res.status(400).json({ error: 'Invalid notes page.' });
     const notes = (await db.query(`SELECT id,comment,actor_name,created_at FROM reference_notes WHERE reference_id=$1 ${before ? 'AND id<$2' : ''} ORDER BY id DESC LIMIT 51`, before ? [req.params.id, before] : [req.params.id])).rows;
     const reviews = await referenceReviews(db);
-    res.json({ home: { ...home.data, listed: home.listed, review: reviews(home.data.id) }, notes: notes.slice(0, 50), nextBefore: notes.length > 50 ? notes[49].id : null });
+    res.json({ home: { ...home.data, listingHistory: listingHistory([home]), listed: home.listed, review: reviews(home.data.id) }, notes: notes.slice(0, 50), nextBefore: notes.length > 50 ? notes[49].id : null });
   });
   app.post('/api/references/:id/notes', session, csrf, express.json({ limit: '64kb' }), async (req, res) => {
     const parsed = noteSchema.safeParse(req.body);
@@ -85,8 +89,9 @@ export function installReferences(app, { db, session, csrf, importer }) {
       await tx.query('UPDATE reference_homes SET listed=false');
       for (const h of input.homes) {
         const previous = previousHomes.get(h.id)?.data || {};
-        const retained = Object.fromEntries(['availability', 'availabilityCheckedAt', 'availabilityEvidence'].filter(k => previous[k] !== undefined).map(k => [k, previous[k]]));
+        const retained = Object.fromEntries(['availability', 'availabilityCheckedAt', 'availabilityEvidence', 'publishedAt'].filter(k => previous[k] !== undefined).map(k => [k, previous[k]]));
         const data = { ...retained, ...h, checkedAt: h.checkedAt || previous.checkedAt || input.observedAt,
+          firstSeenAt: earliestListingDay(previous.firstSeenAt, h.firstSeenAt, input.observedAt),
           matches: [...new Set([...(previous.matches || []), ...h.matches])], duplicateOf: h.duplicateOf || previous.duplicateOf || null };
         await tx.query('INSERT INTO reference_homes(id,data,listed) VALUES($1,$2,true) ON CONFLICT(id) DO UPDATE SET data=EXCLUDED.data,listed=true,imported_at=now()', [h.id, JSON.stringify(data)]);
       }

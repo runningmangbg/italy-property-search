@@ -46,6 +46,9 @@ test('notes are shared, CSRF protected and idempotent; source refresh preserves 
   await post({ ...bundle, sourceRevision:'r2', expectedRevision:'r1', homes:[{...home, price:180000}] }).expect(200);
   const d = (await bob.get('/api/references/12345678')).body;
   assert.equal(d.home.checkedAt, bundle.observedAt); assert.equal(d.home.price,180000); assert.equal(d.notes[0].comment,note.comment);
+  assert.equal(d.home.firstSeenAt, '2026-09-27');
+  assert.equal(d.home.listingHistory.since, '2026-09-27');
+  assert.equal(d.home.listingHistory.basis, 'first-seen');
   assert.equal((await pg.query("SELECT status FROM decisions WHERE property_id='MR001'")).rows[0].status,'Closed');
   assert.equal((await pg.query("SELECT content_hash FROM properties WHERE id='MR001'")).rows[0].content_hash,'unchanged');
 });

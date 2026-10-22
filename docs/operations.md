@@ -1,5 +1,9 @@
 # Operation and safe cutover
 
+## Advertisement age
+
+Cards and dossiers distinguish verified publication age from a minimum age based on the earliest recorded sighting. Record `publishedAt` (ISO date) only when the advert explicitly gives its original publication date; a last-updated date is not a publication date. Property source observations also accept `published_at`. Preserve the source URL. `firstSeenAt` is retained across imports; existing `sources[].first_seen`, original property snapshot dates and reference membership observations supply historical discovery evidence. Import timestamps and last-check timestamps are never used as original publication dates. Linked adverts use their earliest evidence; an older sighting takes precedence over a newer relisting publication date and is labelled as a lower bound. Age does not establish continuous availability. No publication date is inferred when none is recorded.
+
 ## Runtime configuration
 
 | Variable | Purpose |

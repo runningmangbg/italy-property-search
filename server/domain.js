@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { collectionRows } from './collection.js';
+import { earliestListingDay } from './listing-age.js';
 export const digest = value => createHash('sha256').update(typeof value === 'string' || Buffer.isBuffer(value) ? value : JSON.stringify(value)).digest('hex');
 
 export function normalizeDossier(dossier) {
@@ -46,10 +47,12 @@ export function rank(rows) {
 }
 
 export async function allProperties(db) {
-  const properties = (await db.query(`SELECT p.*, d.status, d.favourite, d.revision,
+  const properties = (await db.query(`SELECT p.*, first_seen.first_observed_at, d.status, d.favourite, d.revision,
     (SELECT count(*) FROM feedback_events e WHERE e.property_id=p.id AND e.comment<>'') AS comment_count
-    FROM properties p LEFT JOIN decisions d ON d.property_id=p.id`)).rows;
-  const references = (await db.query('SELECT * FROM reference_homes')).rows;
+    FROM properties p LEFT JOIN decisions d ON d.property_id=p.id
+    LEFT JOIN (SELECT property_id,min(observed_at) AS first_observed_at FROM property_snapshots GROUP BY property_id) first_seen ON first_seen.property_id=p.id`)).rows;
+  const references = (await db.query(`SELECT r.*, first_seen.first_observed_at FROM reference_homes r
+    LEFT JOIN (SELECT reference_id,min(observed_at) AS first_observed_at FROM reference_membership_events WHERE listed=true GROUP BY reference_id) first_seen ON first_seen.reference_id=r.id`)).rows;
   const votes = (await db.query('SELECT * FROM reference_decisions')).rows;
   return rank(collectionRows(properties, references, votes));
 }
@@ -73,6 +76,7 @@ export async function importProperties(db, payload) {
       const current = await tx.query('SELECT data, content_hash FROM properties WHERE id=$1 FOR UPDATE', [incoming.id]);
       // Sparse refreshes may not erase previously retained facts, source aliases, or history.
       const p = { ...(current.rows[0]?.data || {}), ...incoming };
+      p.firstSeenAt = earliestListingDay(current.rows[0]?.data.firstSeenAt, incoming.firstSeenAt, payload.observedAt);
       if (p.dossier !== undefined) p.dossier = normalizeDossier(p.dossier);
       // A failed image fetch is not evidence that previously saved photos vanished.
       // Keep their metadata aligned with the durable media bytes on sparse refreshes.

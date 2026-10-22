@@ -1,6 +1,7 @@
 // A physical home has one place in the collection, regardless of source.
 // Only recorded matches, duplicate links and exact listing URLs join identities.
 import { propertyAgencies } from './agencies.js';
+import { listingHistory } from './listing-age.js';
 const unavailable = new Set(['sold', 'withdrawn', 'removed', 'unavailable']);
 
 function listingIds(value, found = new Set()) {
@@ -64,6 +65,7 @@ export function collectionRows(properties, references, votes) {
     return {
       ...base,
       data: { ...base.data, availability, referenceIds: [...ids],
+        listingHistory: listingHistory([...g.properties, ...g.references]),
         agencies: propertyAgencies([...g.properties, ...g.references].map(row => row.data)),
         aliasPropertyIds: g.properties.slice(1).map(p => p.id),
         referencePhoto: base.data.referencePhoto || h?.photo || null,

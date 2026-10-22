@@ -48,6 +48,9 @@ test('imports preserve IDs, watch separation, revisions, and shared decisions',a
   await bob.post('/api/properties/AB001/feedback').set('X-CSRF-Token',csrfB).send({...decision,requestId:randomUUID(),status:'Interested'}).expect(409);
   await request(app).post('/api/import').set('Authorization',`Bearer ${secret}`).send(manifest('price-drop',175000)).expect(200);
   const detail=(await bob.get('/api/properties/AB001')).body;
+  assert.equal(detail.property.firstSeenAt,'2026-09-26');
+  assert.equal(detail.property.listingHistory.since,'2026-09-26');
+  assert.equal(detail.property.listingHistory.basis,'first-seen');
   assert.equal(detail.property.status,'Closed'); assert.equal(detail.property.rank,null); assert.equal(detail.property.favourite,true);
   assert.equal(detail.events.length,1); assert.equal(detail.events[0].comment,decision.comment);
   assert.equal(detail.snapshots.length,2); assert.equal(detail.property.price,175000);
