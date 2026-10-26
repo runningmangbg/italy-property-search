@@ -6,7 +6,7 @@ import {PGlite} from '@electric-sql/pglite';
 import request from 'supertest';
 import {createApp} from '../server/app.js';
 import {hashPassword} from '../server/auth.js';
-import {exercises,lessons,exerciseMap,isCorrect} from '../server/italian-content.js';
+import {exercises,lessons,exerciseMap,isCorrect,vocabulary,vocabularySummary} from '../server/italian-content.js';
 import {nextReview,selectPractice} from '../server/italian.js';
 let pg,db,app,peter,rebecka,csrf;
 before(async()=>{
@@ -72,4 +72,23 @@ test('a repeated request ID cannot overwrite a different exercise',async()=>{
  await peter.post('/api/italian/attempt').set('X-CSRF-Token',csrf).send(body).expect(200);
  await peter.post('/api/italian/attempt').set('X-CSRF-Token',csrf).send({...body,exerciseId:'noun-libro',answer:'libri'}).expect(409);
  assert.equal((await db.query('SELECT count(*)::int AS n FROM italian_progress WHERE user_id=$1 AND exercise_id=$2',['peter','noun-libro'])).rows[0].n,0);
+});
+test('word list requires login, supports Swedish searches, topics, word classes and bounded pages',async()=>{
+ await request(app).get('/api/italian/words').expect(401);
+ const all=(await peter.get('/api/italian/words').expect(200)).body;assert.equal(all.total,vocabularySummary.entries);assert.equal(all.words.length,40);
+ const verbs=(await peter.get('/api/italian/words?pos=verb').expect(200)).body;assert.equal(verbs.total,200);assert.ok(verbs.words.every(w=>w.pos==='verb'));
+ const next=(await peter.get('/api/italian/words?page=2').expect(200)).body;assert.notEqual(next.words[0].id,all.words[0].id);
+ const search=(await peter.get('/api/italian/words?topic=health&search=h%C3%A4l').expect(200)).body;assert.ok(search.words.some(w=>w.lemma==='tallone'));assert.ok(search.words.every(w=>w.topic==='health'));
+ await peter.get('/api/italian/words?page=-1').expect(400);
+ const q=(await peter.get('/api/italian/practice?scope=words&direction=sv&lesson=vocab-food').expect(200)).body;assert.ok(q.questions.every(q=>q.kind==='word'&&q.direction==='sv'));
+});
+test('new vocabulary uses independent learner histories and production-specific mastery',async()=>{
+ const csrfR=(await rebecka.post('/api/login').send({username:'rebecka',password:'test-password'})).body.csrf;
+ const w=vocabulary.find(w=>w.it==='la casa');
+ for(let i=0;i<3;i++)await rebecka.post('/api/italian/attempt').set('X-CSRF-Token',csrfR).send({requestId:randomUUID(),exerciseId:`vocab-${w.id}-sv`,answer:'hus'}).expect(200);
+ let course=(await rebecka.get('/api/italian/course')).body;assert.equal(course.vocabulary.practiced,1);assert.equal(course.vocabulary.secure,0);
+ for(let i=0;i<3;i++)await rebecka.post('/api/italian/attempt').set('X-CSRF-Token',csrfR).send({requestId:randomUUID(),exerciseId:`vocab-${w.id}-it`,answer:'casa'}).expect(200);
+ course=(await rebecka.get('/api/italian/course')).body;assert.equal(course.vocabulary.secure,1);assert.equal(course.vocabulary.counts.verb,200);
+ assert.equal((await peter.get('/api/italian/course')).body.vocabulary.practiced,0);
+ const list=(await rebecka.get('/api/italian/words?search=casa')).body;assert.equal(list.words.find(x=>x.id===w.id).secure,true);
 });

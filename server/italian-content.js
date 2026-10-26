@@ -1,3 +1,7 @@
+import { createHash } from 'node:crypto';
+import { vocabularyTopics, vocabularyEntries, extraVerbs, extraAdjectives } from './italian-vocabulary.js';
+import { phraseEntries } from './italian-phrases.js';
+import { nounForms } from './italian-noun-forms.js';
 // Stable exercise IDs keep individual learning histories intact as the course grows.
 export const lessons = [
   { id:'nouns', title:'Substantiv: en eller flera', category:'Substantiv', level:'A1', description:'Genus och plural, från casa till case.', rule:'Substantiv har maskulint eller feminint genus. Oftast blir -o → -i, -a → -e och -e → -i i plural. Genus behöver läras tillsammans med ordet: il libro, la casa. Slutbokstaven är en ledtråd, ingen garanti.', examples:[['il libro → i libri','boken → böckerna'],['la casa → le case','huset → husen'],['il ristorante → i ristoranti','restaurangen → restaurangerna'],['la notte → le notti','natten → nätterna'],['il problema → i problemi','problema är maskulint trots -a'],['il caffè → i caffè','ord med betonad slutvokal ändras inte']], note:'Många ord på -ca/-ga får -che/-ghe för att behålla det hårda ljudet: amica → amiche. Vanliga undantag: uomo → uomini, uovo → uova. Pluralformen uova är feminin.' },
@@ -56,7 +60,8 @@ const verbs=[
  ['stare','må/stanna','irregular',['sto','stai','sta','stiamo','state','stanno'],null,'essere','star'],
  ['arrivare','anlända','are',['arrivo','arrivi','arriva','arriviamo','arrivate','arrivano'],'arrivato','essere','arriver']
 ];
-export const verbTables=verbs.map(([infinitive,swedish,group,present])=>({infinitive,swedish,group,present}));
+verbs.push(...extraVerbs.filter(v=>!verbs.some(old=>old[0]===v[0])));
+export const verbTables=verbs.map(([infinitive,swedish,group,present])=>({infinitive,swedish:swedish.split(';')[0],group,present}));
 for(const [inf,sw,group,forms,participle,aux,futureStem] of verbs) {
  for(let i=0;i<6;i++) {
   const irregular=group==='irregular', lesson=irregular?'present-irregular':'present-regular';
@@ -71,7 +76,7 @@ for(const [inf,sw,group,forms,participle,aux,futureStem] of verbs) {
   }
   const fut=futureStem+['ò','ai','à','emo','ete','anno'][i];
   add(`fut-${inf}-${i}`,'future',irregular||inf==='vedere'?`future-irregular`:`future-regular`,`Futurum · ${persons[i]}`,`${persons[i]} ___ (${inf}, futuro semplice)`,fut,`${persons[i]} ${fut}. Stammen är ${futureStem}- och ändelsen ${['-ò','-ai','-à','-emo','-ete','-anno'][i]}.`,'Första och tredje person singular har accent.',sw);
-  if(participle && aux==='avere') {
+  if(participle && aux==='avere' && inf!=='vivere') {
    const answer=['ho','hai','ha','abbiamo','avete','hanno'][i]+' '+participle;
    add(`past-${inf}-${i}`,'past','past-avere',`Passato prossimo · ${persons[i]}`,`${persons[i]} ___ (${inf}, passato prossimo)`,answer,`${persons[i]} ${answer}. Avere i presens + participet ${participle}.`,'Skriv både hjälpverb och particip.',sw);
   }
@@ -84,6 +89,56 @@ for(const [inf,sw,group,forms,participle,aux,futureStem] of verbs) {
   }
  }
 }
+// Vocabulary and new drills are appended; the original 676 IDs keep their meaning.
+const slug=value=>value.normalize('NFD').replace(/\p{M}/gu,'').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'');
+const lemma=it=>it.replace(/^(?:il |lo |la |i |gli |le |l')/,'');
+const dictionary=new Map();
+for(const entry of [...vocabularyEntries,
+ ...nouns.map(([singular,plural,article,pa,sv])=>({it:join(article,singular),sv:[sv],pos:'noun',topic:'home'})),
+ ...adjectives.map(([it,f,mp,fp,sv])=>({it,sv:[sv],pos:'adjective',topic:'descriptions'})),
+ ...verbs.map(([it,sv])=>({it,sv:sv.split(';'),pos:'verb',topic:'actions'}))]) {
+ const key=entry.pos+':'+entry.it.toLowerCase();
+ const old=dictionary.get(key);
+ if(old){old.sv=[...new Set([...old.sv,...entry.sv])];continue;}
+ dictionary.set(key,{...entry,id:`${entry.pos}-${slug(entry.it)}-${createHash('sha256').update(key).digest('hex').slice(0,7)}`,lemma:lemma(entry.it)});
+}
+export const vocabulary=[...dictionary.values()].sort((a,b)=>a.lemma.localeCompare(b.lemma,'it'));
+export const vocabularySummary={entries:vocabulary.length,uniqueLemmas:new Set(vocabulary.map(w=>w.lemma)).size,phrases:phraseEntries.length,counts:Object.fromEntries(['verb','noun','adjective','other'].map(pos=>[pos,vocabulary.filter(w=>w.pos===pos).length]))};
+const posNames={verb:'verb i infinitiv',noun:'substantiv',adjective:'adjektiv i grundform',other:'småord eller fast uttryck'};
+const synonyms=new Map();
+for(const w of vocabulary)for(const sv of w.sv){const key=w.pos+'|'+sv;const forms=synonyms.get(key)||new Set();forms.add(w.it);if(w.pos==='noun')forms.add(w.lemma);synonyms.set(key,forms);}
+const extraAccepted={comprare:['acquistare'],auto:['automobile',"l'automobile"],cellulare:['telefonino','il telefonino'],adesso:['ora'],soltanto:['solo']};
+for(const topic of vocabularyTopics) {
+ const examples=vocabulary.filter(w=>w.topic===topic.id).slice(0,5).map(w=>[w.it,w.sv[0]]);
+ lessons.push({id:`vocab-${topic.id}`,kind:'vocabulary',topic:topic.id,title:topic.title,category:'Ord & fraser',level:'A1',description:topic.description,rule:'Lär in ordet tillsammans med dess artikel eller i ett kort uttryck. Öva åt båda hållen och säg gärna svaret högt innan du skriver.',examples,note:'Ordövningen tränar ordlistans motsvarighet. Ledtråden visar ordklass och första bokstaven. Fraserna har en lucka med svensk betydelse för att svaret ska vara tydligt avgränsat.'});
+}
+for(const word of vocabulary) {
+ const full=word.it,short=word.lemma,lesson=`vocab-${word.topic}`;
+ const skill=`word-${word.id}`;
+ const italianAnswers=[...new Set([full,...(synonyms.get(word.pos+'|'+word.sv[0])||[]),...(extraAccepted[short]||[])])];
+ exercises.push({id:`vocab-${word.id}-it`,lesson,skill,kind:'word',wordId:word.id,direction:'it',label:'Svenska → italienska',prompt:`Skriv på italienska: ${word.sv[0]}`,answers:italianAnswers,explanation:`${full} = ${word.sv.join('; ')}.`,hint:`${posNames[word.pos]}. Ordlistans ord börjar på ${short[0]}.`,translation:word.pos==='noun'?'Öva ordlistans ord. Bestämd artikel är valfri.':'Öva ordlistans ord eller uttryck. Kända synonymer godtas.'});
+ const swedish=word.sv.flatMap(sv=>[sv,sv.replace(/\s*\([^)]*\)/g,'').trim()]);
+ exercises.push({id:`vocab-${word.id}-sv`,lesson,skill,kind:'word',wordId:word.id,direction:'sv',label:'Italienska → svenska',prompt:`Vad betyder ${full}?`,answers:[...new Set(swedish)],explanation:`${full} = ${word.sv.join('; ')}.`,hint:`Ordklass: ${posNames[word.pos]}.`,translation:'Skriv en svensk betydelse från ordlistan.'});
+ // New nouns get an article drill, while only explicitly checked forms get plural drills.
+ const match=/^(il|lo|la|l')\s*(.+)$/.exec(full);
+ if(word.pos!=='noun'||!match||nouns.some(n=>join(n[2],n[0])===full))continue;
+ const article=match[1];
+ add(`new-article-s-${word.id}`,'articles',`article-${article}`,'Bestämd artikel · singular',`___ ${short} (${word.sv[0]})`,article,`${full}: lär in artikeln tillsammans med substantivet.`,'Svara enbart med den bestämda artikeln.');
+ const form=nounForms.get(short);
+ if(!form||(article==='la'&&form.article==='i'))continue;
+ add(`new-noun-${word.id}`,'nouns',`noun-extra-${word.topic}`,'Substantiv · plural',`Skriv plural av ${short}.`,form.plural,`${full} → ${join(form.article,form.plural)}.`,'Tänk på ändelsen. Vissa ord ändras inte.',word.sv[0]);
+ add(`new-article-p-${word.id}`,'articles',`article-${form.article}`,'Bestämd artikel · plural',`___ ${form.plural} (${word.sv[0]}, plural)`,form.article,`${full} → ${join(form.article,form.plural)}.`,'Svara enbart med pluralens bestämda artikel.');
+}
+for(const a of extraAdjectives.filter(a=>!adjectives.some(old=>old[0]===a[0]))) for(let i=0;i<4;i++) {
+ const formLabels=['maskulin singular','feminin singular','maskulin plural','feminin plural'];
+ add(`new-adj-${a[0]}-${i}`,'adjectives',`adj-extra-${a[0]}`,'Adjektiv · '+formLabels[i],`Böj ${a[0]} till ${formLabels[i]}.`,a[i],`${a[0]}: ${a.slice(0,4).join(', ')} (maskulin singular, feminin singular, maskulin plural, feminin plural).`,'Tänk på genus, antal och stavning.',a[4]);
+}
+for(const phrase of phraseEntries) {
+ const id=createHash('sha256').update(phrase.topic+'|'+phrase.it+'|'+phrase.sv).digest('hex').slice(0,12);
+ exercises.push({id:`phrase-${phrase.topic}-${id}`,lesson:`vocab-${phrase.topic}`,skill:`phrase-${phrase.topic}`,kind:'phrase',label:'Italienska i vardagen · fyll i luckan',prompt:phrase.it,answers:phrase.answers,explanation:`${phrase.it.replace('___',phrase.answers[0])} — ${phrase.sv} ${phrase.note}`,hint:`Den saknade delen börjar på ${phrase.answers[0][0]}.`,translation:phrase.sv});
+}
+// Explicitly permitted spelling variants, without accepting missing grammatical accents.
+for(const q of exercises) {q.kind ||= 'grammar';if(q.answers.includes('menù'))q.answers.push('menu');}
 export const exerciseMap = new Map(exercises.map(q=>[q.id,q]));
 export const normalizeAnswer = value => String(value).normalize('NFC').toLocaleLowerCase('it').replace(/[’‘`]/g,"'").replace(/\s+/g,' ').replace(/\s*'\s*/g,"'").trim();
-export const isCorrect = (exercise,answer) => exercise.answers.some(a=>normalizeAnswer(a)===normalizeAnswer(answer));
+export const isCorrect = (exercise,answer) => {const norm=value=>exercise.kind==='word'||exercise.kind==='phrase'?normalizeAnswer(value).replace(/[.!?]+$/,'').trim():normalizeAnswer(value);return exercise.answers.some(a=>norm(a)===norm(answer));};
