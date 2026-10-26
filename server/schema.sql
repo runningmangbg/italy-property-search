@@ -1,3 +1,31 @@
+-- Individual learning history; deliberately independent of the property collection.
+CREATE TABLE IF NOT EXISTS italian_attempts (
+  id bigserial PRIMARY KEY,
+  request_id uuid NOT NULL UNIQUE,
+  user_id text NOT NULL,
+  exercise_id text NOT NULL,
+  skill text NOT NULL,
+  answer text NOT NULL,
+  correct boolean NOT NULL,
+  revealed boolean NOT NULL DEFAULT false,
+  result jsonb NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS italian_attempt_history ON italian_attempts(user_id,created_at DESC,id DESC);
+CREATE TABLE IF NOT EXISTS italian_progress (
+  user_id text NOT NULL,
+  exercise_id text NOT NULL,
+  attempts integer NOT NULL DEFAULT 0,
+  correct integer NOT NULL DEFAULT 0,
+  streak integer NOT NULL DEFAULT 0,
+  due_at timestamptz NOT NULL,
+  last_answer text NOT NULL DEFAULT '',
+  last_correct boolean NOT NULL DEFAULT false,
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY(user_id,exercise_id)
+);
+CREATE INDEX IF NOT EXISTS italian_review_due ON italian_progress(user_id,due_at);
+
 CREATE TABLE IF NOT EXISTS properties (
   id text PRIMARY KEY,
   data jsonb NOT NULL,

@@ -58,3 +58,9 @@ npm run dev
 
 Tests cover access, CSRF, cross-user feedback, conflicts, idempotent saves, retained closures after price drops, source history, invalid media and logout.
 
+
+## Italienska – Parliamo
+
+Open `/italiano` or choose **Italienska** in the signed-in header. The course has Swedish explanations, 676 exercises across eight lessons, independent learner histories, server-side answer checking, and spaced repetition. It uses the existing session, CSRF protection and PostgreSQL connection; no additional service or secrets are required.
+
+`italian_attempts` retains each submitted answer (including revealed answers); `italian_progress` stores each learner's exercise counts, consecutive correct answers and next review date. Both tables are added by the existing startup migration. Revealing an answer counts as a miss. Missed exercises return once during the same session and become due in 10 minutes; correct answers schedule reviews after 1, 3, 7, 14, 30 and 60 days. Exercises leave the weaknesses queue after three correct answers in succession. Learners can practice before a review is due. Exercise IDs in `server/italian-content.js` must stay stable when updating content; change an ID if a question's meaning changes.

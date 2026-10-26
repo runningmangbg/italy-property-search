@@ -9,6 +9,7 @@ import { token, passwordMatches, sameSecret, hashPassword } from './auth.js';
 import { installHandbook } from './handbook.js';
 import { installReferences } from './references.js';
 import { createExportHandler } from './export.js';
+import { installItalian } from './italian.js';
 
 const root = path.dirname(fileURLToPath(new URL('../package.json', import.meta.url)));
 const pid = z.string().regex(/^(?:(?:AB|MR|DL)\d{3,6}|IL\d{5,12})$/);
@@ -125,8 +126,10 @@ export function createApp({ db, users = [], importToken = '', production = false
   app.get('/api/feedback-export', importer, async (req, res) => res.json({ decisions: (await db.query('SELECT * FROM decisions ORDER BY property_id')).rows, events: (await db.query('SELECT * FROM feedback_events ORDER BY id')).rows, referenceDecisions: (await db.query('SELECT * FROM reference_decisions ORDER BY reference_id,user_id')).rows, referenceEvents: (await db.query('SELECT * FROM reference_decision_events ORDER BY id')).rows, referenceNotes: (await db.query('SELECT * FROM reference_notes ORDER BY id')).rows }));
   installHandbook(app, { db, importer });
   installReferences(app, { db, session, csrf, importer });
+  installItalian(app, { db, session, csrf });
   app.use('/api', (req, res) => res.status(404).json({ error: 'Endpoint not found.' }));
   app.use(express.static(path.join(root, 'public'), { dotfiles: 'deny', maxAge: 0 }));
+  app.get(/^\/italiano\/?$/, (req, res) => res.sendFile(path.join(root, 'public/italiano.html')));
   app.get(/^\/(?:properties\/(?:AB|MR|DL|IL)\d+|(?:AB|MR|DL|IL)\d+\.html)$/, (req, res) => res.sendFile(path.join(root, 'public/index.html')));
   app.get(/^\/references(?:\/\d{5,12})?\/?$/, (req, res) => res.sendFile(path.join(root, 'public/index.html')));
   app.use((error, req, res, next) => {

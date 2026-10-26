@@ -96,7 +96,7 @@ async function api(path, options = {}) {
   return data;
 }
 function header() {
-  account.innerHTML = state.user ? `<div class="account"><a class="handbook-link" href="/handbook/" lang="sv">Handboken</a><span class="name">${esc(state.user.name)}</span><button id="logout">Sign out</button></div>` : '';
+  account.innerHTML = state.user ? `<div class="account"><a class="handbook-link" href="/italiano" lang="sv">Italienska</a><a class="handbook-link" href="/handbook/" lang="sv">Handboken</a><span class="name">${esc(state.user.name)}</span><button id="logout">Sign out</button></div>` : '';
 }
 function login(error = '') {
   state.user = null; header();
@@ -244,7 +244,7 @@ document.addEventListener('submit', async event => {
 function route() {
   const next = new URLSearchParams(location.search).get('next');
   if (next && state.user) {
-    try { const destination = new URL(next, location.origin); if (destination.origin === location.origin && /^\/handbook(?:\/|$)/.test(destination.pathname)) { location.assign(destination.href); return; } } catch {}
+    try { const destination = new URL(next, location.origin); if (destination.origin === location.origin && /^\/(?:handbook|italiano)(?:\/|$)/.test(destination.pathname)) { location.assign(destination.href); return; } } catch {}
   }
   const reference = /^\/references(?:\/(\d{5,12}))?\/?$/.exec(location.pathname);
   if (reference) return reference[1] ? showReference(reference[1]) : showReferences();

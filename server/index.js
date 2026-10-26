@@ -16,7 +16,7 @@ const users = JSON.parse(process.env.APP_USERS || '[]');
 if (users.some(u => !u.id || !u.name || !/^[0-9a-f]{32}:[0-9a-f]{128}$/.test(u.passwordHash || ''))) throw new Error('Invalid APP_USERS configuration.');
 const devPreview = !production && process.env.DEV_PREVIEW === '1';
 const app = createApp({ db, users, importToken: process.env.IMPORT_TOKEN, production, devPreview });
-const server = app.listen(Number(process.env.PORT || 3000), production ? '0.0.0.0' : '127.0.0.1', () => console.log(db ? 'Property site ready.' : 'Waiting for DATABASE_URL configuration.'));
+const server = app.listen(Number(process.env.PORT || 3000), production || devPreview ? '0.0.0.0' : '127.0.0.1', () => console.log(db ? 'Property site ready.' : 'Waiting for DATABASE_URL configuration.'));
 server.requestTimeout = 30000;
 async function stop() { server.close(async () => { if (db) await db.close(); process.exit(0); }); setTimeout(() => process.exit(1), 9000).unref(); }
 process.on('SIGTERM', stop);
