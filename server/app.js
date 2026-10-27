@@ -12,8 +12,8 @@ import { createExportHandler } from './export.js';
 import { installItalian } from './italian.js';
 
 const root = path.dirname(fileURLToPath(new URL('../package.json', import.meta.url)));
-const pid = z.string().regex(/^(?:(?:AB|MR|DL)\d{3,6}|IL\d{5,12})$/);
-const propertySchema = z.object({ id: pid, name: z.string().min(1).max(500), price: z.number().nonnegative().nullable(), score: z.number().min(0).max(100).nullable(), region: z.string().min(1).max(80), province: z.string().max(80) }).passthrough().refine(p => p.id.startsWith('IL') || ['Abruzzo', 'Marche', 'Dolomiti'].includes(p.region), 'Use the established search area or an individually selected Idealista home.');
+const pid = z.string().regex(/^(?:(?:AB|MR|DL|PM)\d{3,6}|IL\d{5,12})$/);
+const propertySchema = z.object({ id: pid, name: z.string().min(1).max(500), price: z.number().nonnegative().nullable(), score: z.number().min(0).max(100).nullable(), region: z.string().min(1).max(80), province: z.string().max(80) }).passthrough().refine(p => p.id.startsWith('IL') || ['Abruzzo', 'Marche', 'Dolomiti', 'Piedmont'].includes(p.region), 'Use the established search area or an individually selected Idealista home.');
 const importSchema = z.object({ sourceRevision: z.string().min(1).max(200), observedAt: z.iso.datetime({ offset: true }), properties: z.array(propertySchema).max(3000), meta: z.record(z.string(), z.unknown()).optional() }).refine(p => p.properties.length > 0 || Object.keys(p.meta || {}).some(key => key !== 'idealistaReferences'), 'An import must contain properties or project metadata.');
 const decisionSchema = z.object({ requestId: z.uuid(), revision: z.number().int().nonnegative(), status: z.enum(['Open', 'Interested', 'On hold', 'Closed']), favourite: z.boolean(), comment: z.string().max(8000).default('') }).strict();
 
@@ -130,7 +130,7 @@ export function createApp({ db, users = [], importToken = '', production = false
   app.use('/api', (req, res) => res.status(404).json({ error: 'Endpoint not found.' }));
   app.use(express.static(path.join(root, 'public'), { dotfiles: 'deny', maxAge: 0 }));
   app.get(/^\/italiano\/?$/, (req, res) => res.sendFile(path.join(root, 'public/italiano.html')));
-  app.get(/^\/(?:properties\/(?:AB|MR|DL|IL)\d+|(?:AB|MR|DL|IL)\d+\.html)$/, (req, res) => res.sendFile(path.join(root, 'public/index.html')));
+  app.get(/^\/(?:properties\/(?:AB|MR|DL|PM|IL)\d+|(?:AB|MR|DL|PM|IL)\d+\.html)$/, (req, res) => res.sendFile(path.join(root, 'public/index.html')));
   app.get(/^\/references(?:\/\d{5,12})?\/?$/, (req, res) => res.sendFile(path.join(root, 'public/index.html')));
   app.use((error, req, res, next) => {
     if (res.headersSent) return next(error);

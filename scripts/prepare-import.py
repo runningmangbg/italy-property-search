@@ -31,7 +31,7 @@ for row in rows:
     obj = dict(old.get(identity, {}))
     for key, n in [('id',1),('tier',2),('name',3),('province',4),('price',5),('size',6),('land',7),('score',8),('allLow',9),('allHigh',10),('why',11),('risks',12),('owner',13),('bb',14),('source',15)]:
         obj[key] = row[n] if len(row)>n else None
-    search_areas = {'AB': 'Abruzzo', 'MR': 'Marche', 'DL': 'Dolomiti'}
+    search_areas = {'AB': 'Abruzzo', 'MR': 'Marche', 'DL': 'Dolomiti', 'PM': 'Piedmont'}
     if identity.startswith('IL') and identity[2:].isdigit():
         geography = context.get('propertyGeography', {}).get(identity, {})
         obj['region'] = geography.get('searchArea') or geography.get('region') or obj.get('region')

@@ -8,6 +8,38 @@ import { createApp } from '../server/app.js';
 import { hashPassword } from '../server/auth.js';
 import { budget } from '../server/domain.js';
 
+test('Piedmont homes support imports, media, shared-list matches and preserved owner decisions', async () => {
+  const pg = new PGlite();
+  try {
+    await pg.exec(await readFile(new URL('../server/schema.sql', import.meta.url), 'utf8'));
+    const db = { query: (...args) => pg.query(...args), transaction: fn => pg.transaction(fn) };
+    const app = createApp({ db, importToken: secret, users: [{ id: 'owner', name: 'Owner', passwordHash: hashPassword('Owner-test-password') }] });
+    const owner = request.agent(app);
+    const csrf = (await owner.post('/api/login').send({ username: 'owner', password: 'Owner-test-password' })).body.csrf;
+    const property = { id: 'PM001', name: 'Piedmont candidate', region: 'Piedmont', administrativeRegion: 'Piemonte', province: 'AL', price: 180000, score: null, evaluationPending: true };
+    const payload = { sourceRevision: 'piedmont-first', observedAt: '2026-10-27T20:00:00Z', properties: [property] };
+    await request(app).post('/api/import').set('Authorization', `Bearer ${secret}`).send(payload).expect(200);
+    const detail = (await owner.get('/api/properties/PM001').expect(200)).body.property;
+    assert.equal(detail.region, 'Piedmont');
+    assert.equal(detail.administrativeRegion, 'Piemonte');
+    assert.equal(detail.pool, 'verify');
+    assert.equal(detail.rank, null);
+    await owner.get('/properties/PM001').expect(200).expect('Content-Type', /html/);
+    await owner.get('/PM001.html').expect(200).expect('Content-Type', /html/);
+    const image = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=', 'base64');
+    await request(app).put('/api/import/media/PM001/0').set('Authorization', `Bearer ${secret}`).set('Content-Type', 'image/png').send(image).expect(200);
+    await owner.get('/api/media/PM001/0').expect(200).expect('Content-Type', /image\/png/);
+    await request(app).post('/api/import/references').set('Authorization', `Bearer ${secret}`).send({ sourceRevision: 'piedmont-reference', expectedRevision: null, observedAt: payload.observedAt, listName: 'Examples', sourceUrl: 'https://www.idealista.it/fav-list/1?share=example', homes: [{ id: '12345678', name: property.name, url: 'https://www.idealista.it/immobile/12345678/', price: property.price, region: 'Piemonte', province: 'AL', position: 0, area: 'Not verified', land: 'Not verified', photo: null, matches: ['PM001'], assessment: { verdict: 'needs-review', summary: 'Evaluate the especially strong overall fit.', positives: [], questions: [], basis: 'Listing detail' } }] }).expect(200);
+    assert.deepEqual((await owner.get('/api/references/12345678')).body.home.matches, ['PM001']);
+    await owner.post('/api/properties/PM001/feedback').set('X-CSRF-Token', csrf).send({ requestId: randomUUID(), revision: 0, status: 'Closed', favourite: false, comment: 'Owner privacy does not work.' }).expect(200);
+    await request(app).post('/api/import').set('Authorization', `Bearer ${secret}`).send({ ...payload, sourceRevision: 'piedmont-refresh', properties: [{ ...property, price: 175000 }] }).expect(200);
+    const refreshed = (await owner.get('/api/properties/PM001')).body;
+    assert.equal(refreshed.property.status, 'Closed');
+    assert.equal(refreshed.property.rank, null);
+    assert.equal(refreshed.events[0].comment, 'Owner privacy does not work.');
+  } finally { await pg.close(); }
+});
+
 const secret = 'test-import-authorization-token-long-enough';
 let pg, db, app, alice, bob, csrfA, csrfB;
 const manifest = (revision, price=198000) => ({ sourceRevision:revision, observedAt:'2026-09-26T19:19:16Z', properties:[
