@@ -122,6 +122,12 @@ export function createApp({ db, users = [], importToken = '', production = false
     await db.query('INSERT INTO media(property_id,image_index,mime_type,bytes,content_hash) VALUES($1,$2,$3,$4,$5) ON CONFLICT(property_id,image_index) DO UPDATE SET mime_type=EXCLUDED.mime_type,bytes=EXCLUDED.bytes,content_hash=EXCLUDED.content_hash', [req.params.id, n, mime, b, digest(b)]);
     res.json({ saved: true });
   });
+  // Operator-only asset inventory: no sessions, feedback, credentials or history.
+  app.get('/api/import/asset-audit', importer, async (req, res) => {
+    const properties = (await db.query('SELECT id,data FROM properties ORDER BY id')).rows.map(({id,data}) => ({ id, name:data.name, source:data.source, sources:(data.sources || []).map(s=>({url:s.url,role:s.role})), photos:data.photos || [], referencePhoto:data.referencePhoto || null }));
+    const media = (await db.query('SELECT property_id,image_index,mime_type,octet_length(bytes) AS byte_length,content_hash FROM media ORDER BY property_id,image_index')).rows;
+    res.json({ properties, media });
+  });
   app.get('/api/export', importer, createExportHandler(db));
   app.get('/api/feedback-export', importer, async (req, res) => res.json({ decisions: (await db.query('SELECT * FROM decisions ORDER BY property_id')).rows, events: (await db.query('SELECT * FROM feedback_events ORDER BY id')).rows, referenceDecisions: (await db.query('SELECT * FROM reference_decisions ORDER BY reference_id,user_id')).rows, referenceEvents: (await db.query('SELECT * FROM reference_decision_events ORDER BY id')).rows, referenceNotes: (await db.query('SELECT * FROM reference_notes ORDER BY id')).rows }));
   installHandbook(app, { db, importer });
