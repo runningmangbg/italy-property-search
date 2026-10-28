@@ -25,3 +25,11 @@ test('dossier prominently opens the verified alternate advert and retains the or
   assert.ok(html.indexOf(preferred)<html.indexOf('id="feedback"'));
   assert.ok(html.includes(old));
 });
+
+test('a saved listing thumbnail remains visible while the full gallery is pending', async () => {
+  const p={id:'IL12345678',name:'Pending home',price:180000,score:null,pool:'verify',status:'Open',region:'Marche',province:'MC',photos:[],dossier:[],sources:[],source:'https://www.idealista.it/immobile/12345678/',referencePhoto:{url:'https://img4.idealista.it/example.jpg',alt:'Saved property exterior'}};
+  const {html}=await openDossier(p);
+  assert.match(html,/src="https:\/\/img4.idealista.it\/example.jpg"/);
+  assert.match(html,/Saved listing thumbnail/);
+  assert.doesNotMatch(html,/Listing photographs are currently unavailable/);
+});
