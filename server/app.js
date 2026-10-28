@@ -124,9 +124,10 @@ export function createApp({ db, users = [], importToken = '', production = false
   });
   // Operator-only asset inventory: no sessions, feedback, credentials or history.
   app.get('/api/import/asset-audit', importer, async (req, res) => {
-    const properties = (await db.query('SELECT id,data FROM properties ORDER BY id')).rows.map(({id,data}) => ({ id, name:data.name, price:data.price, score:data.score, region:data.region, province:data.province, source:data.source, preferredListingUrl:data.preferredListingUrl, linkAudit:data.linkAudit, sources:(data.sources || []).map(s=>({url:s.url,role:s.role})), photos:data.photos || [], referencePhoto:data.referencePhoto || null }));
+    const properties = (await db.query('SELECT id,data FROM properties ORDER BY id')).rows.map(({id,data}) => ({ id, name:data.name, price:data.price, score:data.score, region:data.region, province:data.province, source:data.source, preferredListingUrl:data.preferredListingUrl, linkAudit:data.linkAudit, availability:data.availability, advertReachability:data.advertReachability, sources:(data.sources || []).map(s=>({url:s.url,role:s.role})), photos:data.photos || [], referencePhoto:data.referencePhoto || null }));
     const media = (await db.query('SELECT property_id,image_index,mime_type,octet_length(bytes) AS byte_length,content_hash FROM media ORDER BY property_id,image_index')).rows;
-    res.json({ properties, media });
+    const collection = req.query.includeCollection === 'true' ? (await allProperties(db)).map(p => ({ id:p.id, pool:p.pool, status:p.status, rank:p.rank, availability:p.availability, advertReachability:p.advertReachability, removedFromSharedList:p.removedFromSharedList })) : undefined;
+    res.json({ properties, media, collection });
   });
   app.get('/api/export', importer, createExportHandler(db));
   app.get('/api/feedback-export', importer, async (req, res) => res.json({ decisions: (await db.query('SELECT * FROM decisions ORDER BY property_id')).rows, events: (await db.query('SELECT * FROM feedback_events ORDER BY id')).rows, referenceDecisions: (await db.query('SELECT * FROM reference_decisions ORDER BY reference_id,user_id')).rows, referenceEvents: (await db.query('SELECT * FROM reference_decision_events ORDER BY id')).rows, referenceNotes: (await db.query('SELECT * FROM reference_notes ORDER BY id')).rows }));

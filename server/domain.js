@@ -25,6 +25,7 @@ export function budget(property, decision = {}) {
   const gatedFromRanking = known && price <= 260000 && property.budgetEligible === false;
   let pool = !known ? 'verify' : price > 260000 || gatedFromRanking ? 'watch' : 'ranked';
   if (pool === 'ranked' && (property.evaluationPending || ('score' in property && !Number.isFinite(property.score)))) pool = 'verify';
+  if (property.advertReachability === 'unverified') pool = 'unverified';
   const geographyExcluded = excludedGeography(property);
   if (geographyExcluded) pool = 'excluded';
   const status = decision.effective_status || decision.status;

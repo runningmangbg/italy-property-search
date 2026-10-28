@@ -22,6 +22,24 @@ const agencySample = sample.map(p => ({ ...p, agencies: ['AB001', 'AB003', 'AB00
   ? [{ id: 'monica-bruni-real-estate', name: 'Monica Bruni Real Estate' }, ...(p.id === 'AB001' ? [{ id: 'immobiliare-puzielli', name: 'Immobiliare Puzielli' }] : [])]
   : [] }));
 
+test('unverified adverts have their own queue and cannot enter active rankings or price watch', async () => {
+  const p=[home('AB001','ranked',{rank:1}),home('AB002','unverified',{score:95,rank:null}),home('AB003','unverified',{status:'Interested'})];
+  const page=await filterPage(p);
+  assert.deepEqual(page.ids(),['AB001']);
+  await page.view('active'); assert.deepEqual(page.ids(),['AB001']);
+  await page.view('watch'); assert.deepEqual(page.ids(),[]);
+  await page.view('unverified'); assert.deepEqual(page.ids(),['AB002']);
+  assert.match(page.node('#collection-content').innerHTML,/not a sold status/);
+  await page.view('interested'); assert.deepEqual(page.ids(),['AB003']);
+});
+
+test('an expired Idealista invitation clearly labels the retained snapshot without inventing removals', async () => {
+  const page=await filterPage(sample,'/?source=idealista',{idealistaListAccess:{status:'blocked'}});
+  assert.match(page.node('#collection-content').innerHTML,/last complete snapshot/);
+  assert.match(page.node('#collection-content').innerHTML,/latest removals have not been applied/);
+  assert.ok(page.ids().includes('AB001'));
+});
+
 test('region filters retain complete province labels and private-seller information', async () => {
   const properties = [home('PM001', 'ranked', { region: 'Piemonte', province: 'TO' }),
     home('DL001', 'ranked', { region: 'Trentino-Alto Adige', province: 'TN', advertiserType: 'private' }),
@@ -95,7 +113,7 @@ test('dossier explains photo scope, uncertainty, score changes and excluded imag
 });
 
 // Execute the shipped scripts and their real event handlers, using a small DOM sink.
-export async function filterPage(properties = sample, path = '/') {
+export async function filterPage(properties = sample, path = '/', meta = {}) {
   const nodes = new Map(), listeners = new Map();
   const node = selector => {
     if (!nodes.has(selector)) nodes.set(selector, { innerHTML: '', textContent: '', value: '', scrollIntoView() {} });
@@ -108,7 +126,7 @@ export async function filterPage(properties = sample, path = '/') {
     document: { querySelector: node, querySelectorAll: () => [], addEventListener: (name, handler) => { if (!listeners.has(name)) listeners.set(name, []); listeners.get(name).push(handler); } },
     window: { addEventListener() {}, scrollTo() {} }, location,
     history: { pushState: updateUrl, replaceState: updateUrl },
-    fetch: async path => ({ ok: true, json: async () => path === '/api/session' ? { user: { id: 'peter', name: 'Peter' }, csrf: 'test' } : { properties, meta: {} } }),
+    fetch: async path => ({ ok: true, json: async () => path === '/api/session' ? { user: { id: 'peter', name: 'Peter' }, csrf: 'test' } : { properties, meta } }),
   });
   const run = code => vm.runInContext(code, context);
   await run(await readFile(new URL('../public/references.js', import.meta.url), 'utf8'));

@@ -156,3 +156,10 @@ Record exact-source advertiser metadata: agency and an agency-verification sourc
 ## Agency filter removed — 28 October 2026
 
 Peter authorized dropping the agency filter if the remaining 111 advertiser identities could not be resolved reliably. A focused follow-up on recorded verified duplicate listings did not resolve the full backlog. The collection therefore has no agency dropdown or agency URL filtering; old agency query parameters are ignored and removed on navigation. Preserve recorded agency/private-seller metadata and show it on cards and dossiers. Do not restore the filter without a later user request. Source, region, province, status, search and ranking filters remain available.
+
+
+## Advert reachability eligibility — 28 October 2026
+
+Peter requires a reachable exact-property advert for active rankings and Price Watch. Record advertReachability (reachable/unverified), advertReachabilityCheckedAt, reachableAdvertUrl and source evidence. budget() moves unverified records to the unverified pool, outside active browsing queues and rankings, without changing their scores or marking them sold. Advert to verify is a separate view; personal Interested/On hold/Closed and the archive remain available. All prior rejection, list-removal, geographical and confirmed unavailability exclusions retain priority. A live advert means advertised online, never seller-confirmed unsold.
+
+The shared Idealista invitation was observed expired/invalid on 28 October. Preserve the last complete membership snapshot and revision; do not infer an empty list or new removals from that failure. project_meta.idealistaListAccess records the blocked state, and the source-filtered view explains stale membership. A renewed read-only sharing link is required to reconcile Peter’s latest removals. On a complete successful list read and total reconciliation, set that metadata status to complete and archive removed aliases in Closed & excluded; never fabricate personal rejections or send email from the scan.
