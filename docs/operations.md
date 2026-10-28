@@ -151,3 +151,8 @@ This is a display filter: stored scores, budget pools and global rank numbers ar
 Administrative geography is canonical: Piemonte (not a separate Piedmont entry), Trentino-Alto Adige with Trento (TN) or Bolzano (BZ), and two-letter province codes. server/geography.js normalizes stored legacy labels and full province names. Dolomiti is retained as searchArea when relevant; it is not an administrative region. Veneto and Valle d’Aosta are excluded from active pools, including DL properties whose real province is Belluno. Their sources, scores, personal statuses and histories remain intact in the archive. Province/region filters hide geographically excluded regions outside the archive.
 
 Record exact-source advertiser metadata: agency and an agency-verification source for professional advertisers, advertiserType=private for a private seller, agencyReview with a truthful date/outcome when unresolved. Private sellers are separate from Agency not recorded; do not use a private person’s name as an agency. A source failure is not evidence of sale or withdrawal. Recheck unresolved names during ordinary scans and preserve the latest owner feedback.
+
+
+## Agency filter removed — 28 October 2026
+
+Peter authorized dropping the agency filter if the remaining 111 advertiser identities could not be resolved reliably. A focused follow-up on recorded verified duplicate listings did not resolve the full backlog. The collection therefore has no agency dropdown or agency URL filtering; old agency query parameters are ignored and removed on navigation. Preserve recorded agency/private-seller metadata and show it on cards and dossiers. Do not restore the filter without a later user request. Source, region, province, status, search and ranking filters remain available.

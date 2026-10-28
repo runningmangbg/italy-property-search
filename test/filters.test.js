@@ -22,7 +22,7 @@ const agencySample = sample.map(p => ({ ...p, agencies: ['AB001', 'AB003', 'AB00
   ? [{ id: 'monica-bruni-real-estate', name: 'Monica Bruni Real Estate' }, ...(p.id === 'AB001' ? [{ id: 'immobiliare-puzielli', name: 'Immobiliare Puzielli' }] : [])]
   : [] }));
 
-test('region and agency filters separate archived geography and private sellers with complete province labels', async () => {
+test('region filters retain complete province labels and private-seller information', async () => {
   const properties = [home('PM001', 'ranked', { region: 'Piemonte', province: 'TO' }),
     home('DL001', 'ranked', { region: 'Trentino-Alto Adige', province: 'TN', advertiserType: 'private' }),
     home('IL12345678', 'excluded', { region: "Valle d'Aosta", province: 'AO', geographyExcluded: true }),
@@ -30,9 +30,7 @@ test('region and agency filters separate archived geography and private sellers 
   const page = await filterPage(properties);
   assert.doesNotMatch(page.node('#collection-content').innerHTML, /<option>Veneto<\/option>/);
   assert.match(page.node('#collection-content').innerHTML, /Torino \(TO\)/);
-  assert.match(page.node('#agency').innerHTML, /Private seller \(1\)/);
-  await page.change('agency', 'private');
-  assert.deepEqual(page.ids(), ['DL001']);
+  assert.doesNotMatch(page.node('#collection-content').innerHTML, /id="agency"/);
   assert.match(page.node('#cards').innerHTML, /Private seller/);
   const archive = await filterPage(properties, '/?view=closed');
   assert.match(archive.node('#collection-content').innerHTML, /Aosta \(AO\)/);
@@ -40,59 +38,24 @@ test('region and agency filters separate archived geography and private sellers 
   assert.deepEqual(legacy.ids(), ['PM001']);
 });
 
-test('agency filters combine with source, geography, views and sort while counting physical homes once', async () => {
-  const page = await filterPage(agencySample);
-  assert.match(page.node('#collection-content').innerHTML, /Agency<select id="agency"/);
-  assert.match(page.node('#agency').innerHTML, /Monica Bruni Real Estate \(2\)/);
-  assert.match(page.node('#agency').innerHTML, /Immobiliare Puzielli \(1\)/);
-  await page.change('agency', 'monica-bruni-real-estate');
-  assert.deepEqual(page.ids(), ['AB001', 'AB003']);
-  assert.match(page.node('#cards').innerHTML, /Agencies:<\/strong> Monica Bruni Real Estate · Immobiliare Puzielli/);
-  await page.change('source', 'idealista');
-  assert.deepEqual(page.ids(), ['AB001', 'AB003', 'MR001']);
-  assert.match(page.node('#agency').innerHTML, /Monica Bruni Real Estate \(3\)/);
-  await page.change('province', 'CH');
-  await page.change('sort', 'rank-desc');
-  assert.deepEqual(page.ids(), ['AB003', 'AB001']);
-  assert.equal(page.run('state.page'), 1);
-  await page.view('closed');
-  assert.deepEqual(page.ids(), ['AB004']);
-  await page.view('active');
-  await page.change('agency', 'immobiliare-puzielli');
-  assert.deepEqual(page.ids(), ['AB001']);
-  await page.change('region', 'Marche');
-  assert.deepEqual(page.ids(), []);
-  assert.match(page.node('#agency').innerHTML, /value="immobiliare-puzielli" selected>Immobiliare Puzielli \(0\)/);
+test('retired agency URL filters are ignored and removed without suppressing homes', async () => {
+  for (const agency of ['monica-bruni-real-estate', 'unknown', 'private', '%22%3E%3Cscript%3E']) {
+    const page = await filterPage(agencySample, '/?agency=' + agency + '&sort=rank-desc');
+    assert.deepEqual(page.ids(), ['AB003', 'AB002', 'AB001']);
+    assert.doesNotMatch(page.node('#collection-content').innerHTML, /id="agency"/);
+    assert.doesNotMatch(page.location.search, /agency=/);
+    assert.match(page.node('#cards').innerHTML, /Monica Bruni Real Estate/);
+    assert.match(page.node('#cards').innerHTML, /Agency not recorded/);
+    const restored = await filterPage(agencySample, page.location.pathname + page.location.search);
+    assert.deepEqual(restored.ids(), page.ids());
+  }
 });
 
-test('agency and unknown-agency selection survive reload and dossier return; reset clears them', async () => {
-  const page = await filterPage(agencySample, '/?agency=monica-bruni-real-estate&sort=rank-desc');
-  assert.deepEqual(page.ids(), ['AB003', 'AB001']);
-  const before = page.location.pathname + page.location.search;
-  const restored = await filterPage(agencySample, before);
-  assert.deepEqual(restored.ids(), page.ids());
-  page.location.pathname = '/properties/AB001';
-  await page.fire('click', { id: 'back' });
-  assert.equal(page.location.pathname + page.location.search, before);
-  await page.change('agency', 'unknown');
-  assert.deepEqual(page.ids(), ['AB002']);
-  assert.match(page.node('#cards').innerHTML, /Agency not recorded/);
-  assert.match(page.node('#agency').innerHTML, /value="unknown" selected>Agency not recorded \(1\)/);
-  await page.fire('click', { id: 'clear-filters' });
-  assert.equal(page.run('state.agency'), '');
-  assert.deepEqual(page.ids(), ['AB001', 'AB002', 'AB003']);
-  assert.equal(page.location.search, '');
-});
-
-test('agency labels and obsolete URL selections remain escaped and never broaden results', async () => {
+test('agency information remains escaped even though its filter is removed', async () => {
   const p = home('AB099', 'ranked', { agencies: [{ id: 'safe-id', name: '<img src=x onerror=alert(1)>' }] });
   const page = await filterPage([p]);
-  assert.match(page.node('#agency').innerHTML, /&lt;img/);
+  assert.match(page.node('#cards').innerHTML, /&lt;img/);
   assert.doesNotMatch(page.node('#cards').innerHTML, /<img src=x/);
-  const missing = await filterPage([p], '/?agency=%22%3E%3Cscript%3E');
-  assert.deepEqual(missing.ids(), []);
-  assert.match(missing.node('#agency').innerHTML, /Agency no longer recorded \(0\)/);
-  assert.doesNotMatch(missing.node('#agency').innerHTML, /<script>/);
 });
 
 test('Major restoration shows only open homes, excluding held and archived homes', async () => {
@@ -306,10 +269,9 @@ test('Interested view combines filters and persists without restoring excluded h
   assert.match(page.node('#main').innerHTML, /data-tab="interested"/);
   await page.change('source', 'idealista');
   assert.equal(page.run('state.tab'), 'interested');
-  await page.change('agency', 'monica-bruni-real-estate');
   await page.change('region', 'Abruzzo');
   await page.change('sort', 'rank-desc');
-  assert.deepEqual(page.ids(), ['AB003', 'AB001']);
+  assert.deepEqual(page.ids(), ['AB003', 'AB001', 'IL32345678']);
   const before = page.location.pathname + page.location.search;
   const reloaded = await filterPage(properties, before);
   assert.deepEqual(reloaded.ids(), page.ids());
@@ -364,7 +326,6 @@ test('reviewed statuses leave every browsing queue while scores, ranks and statu
     assert.ok(page.ids().length > 0, tab);
     assert.ok(page.ids().every(id => id.endsWith('-Open')), tab);
     assert.equal(page.run(`counts()[${JSON.stringify(tab)}]`), page.ids().length);
-    assert.match(page.node('#agency').innerHTML, new RegExp(`Test Agent \\(${page.ids().length}\\)`));
   }
   for (const [tab, status] of [['interested', 'Interested'], ['hold', 'On hold'], ['closed', 'Closed']]) {
     await page.view(tab);

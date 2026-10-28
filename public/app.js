@@ -1,6 +1,6 @@
 const main = document.querySelector('#main');
 const account = document.querySelector('#account');
-const state = { user: null, csrf: '', properties: [], meta: {}, tab: 'ranked', search: '', region: '', province: '', sort: 'rank', source: '', agency: '', page: 1, compare: new Set(), detail: null, requestId: null };
+const state = { user: null, csrf: '', properties: [], meta: {}, tab: 'ranked', search: '', region: '', province: '', sort: 'rank', source: '', page: 1, compare: new Set(), detail: null, requestId: null };
 const activePools = ['ranked', 'watch', 'verify'];
 const collectionTabs = ['ranked', 'active', 'restoration', 'verify', 'watch', 'interested', 'favourites', 'hold', 'closed', 'all', 'weekly'];
 const conditionLabels = { light: 'Light visible wear', moderate: 'Some refurbishment', substantial: 'Substantial work', 'major-restoration': 'Major restoration', 'not-assessable': 'Condition not assessable' };
@@ -33,20 +33,7 @@ function matchesOtherFilters(p) {
   const text = [p.id, p.name, p.region, p.administrativeRegion, p.province, provinceLabel(p.province), ...(p.referenceIds || []), ...(p.aliasPropertyIds || [])].join(' ');
   return (!state.source || p.referenceIds?.length > 0) && (!state.region || p.region === state.region) && (!state.province || provinceKey(p.province) === provinceKey(state.province)) && searchText(text).includes(searchText(state.search));
 }
-function matchesFilters(p) {
-  const agencies = p.agencies || [];
-  return matchesOtherFilters(p) && (!state.agency || (state.agency === 'private' ? p.advertiserType === 'private' : state.agency === 'unknown' ? !agencies.length && p.advertiserType !== 'private' : agencies.some(a => a.id === state.agency)));
-}
-function renderAgencyOptions() {
-  const names = new Map(state.properties.flatMap(p => (p.agencies || []).map(a => [a.id, a.name])));
-  const totals = new Map();
-  const eligible = state.properties.filter(p => inView(p) && matchesOtherFilters(p));
-  for (const p of eligible) for (const id of new Set(p.agencies?.length ? p.agencies.map(a => a.id) : [p.advertiserType === 'private' ? 'private' : 'unknown'])) totals.set(id, (totals.get(id) || 0) + 1);
-  const options = [...names].sort((a, b) => a[1].localeCompare(b[1], 'en', { sensitivity: 'base' }));
-  options.push(['private', 'Private seller'], ['unknown', 'Agency not recorded']);
-  if (state.agency && !['unknown', 'private'].includes(state.agency) && !names.has(state.agency)) options.push([state.agency, 'Agency no longer recorded']);
-  document.querySelector('#agency').innerHTML = `<option value="">All agencies (${eligible.length})</option>` + options.filter(([id]) => totals.has(id) || id === state.agency).map(([id, name]) => `<option value="${esc(id)}"${state.agency === id ? ' selected' : ''}>${esc(name)} (${totals.get(id) || 0})</option>`).join('');
-}
+function matchesFilters(p) { return matchesOtherFilters(p); }
 function agencySummary(p) {
   return `<p class="agency-summary small muted">${p.agencies?.length ? `<strong>${p.agencies.length > 1 ? 'Agencies' : 'Agency'}:</strong> ${p.agencies.map(a => esc(a.name)).join(' · ')}` : p.advertiserType === 'private' ? 'Private seller' : 'Agency not recorded'}</p>`;
 }
@@ -64,13 +51,13 @@ function inView(p, tab = state.tab) {
 }
 function collectionUrl() {
   const params = new URLSearchParams();
-  for (const [key, value, defaultValue] of [['view', state.tab, 'ranked'], ['source', state.source, ''], ['agency', state.agency, ''], ['region', state.region, ''], ['province', state.province, ''], ['sort', state.sort, 'rank'], ['q', state.search, ''], ['page', String(state.page), '1']]) if (value !== defaultValue) params.set(key, value);
+  for (const [key, value, defaultValue] of [['view', state.tab, 'ranked'], ['source', state.source, ''], ['region', state.region, ''], ['province', state.province, ''], ['sort', state.sort, 'rank'], ['q', state.search, ''], ['page', String(state.page), '1']]) if (value !== defaultValue) params.set(key, value);
   return '/' + (params.size ? '?' + params : '');
 }
 function rememberFilters() { history.replaceState({}, '', collectionUrl()); }
 function readFilters() {
   const params = new URLSearchParams(location.search), view = params.get('view'), source = params.get('source') === 'idealista' ? 'idealista' : '';
-  Object.assign(state, { tab: [...collectionTabs, 'profile', 'compare'].includes(view) ? view : source ? 'active' : 'ranked', source, agency: params.get('agency') || '', region: params.get('region') === 'Piedmont' ? 'Piemonte' : params.get('region') === 'Dolomiti' ? 'Trentino-Alto Adige' : params.get('region') || '', province: params.get('province') || '', search: params.get('q') || '', sort: ['price', 'region', 'rank-desc'].includes(params.get('sort')) ? params.get('sort') : 'rank', page: Math.max(1, Number.parseInt(params.get('page'), 10) || 1) });
+  Object.assign(state, { tab: [...collectionTabs, 'profile', 'compare'].includes(view) ? view : source ? 'active' : 'ranked', source, region: params.get('region') === 'Piedmont' ? 'Piemonte' : params.get('region') === 'Dolomiti' ? 'Trentino-Alto Adige' : params.get('region') || '', province: params.get('province') || '', search: params.get('q') || '', sort: ['price', 'region', 'rank-desc'].includes(params.get('sort')) ? params.get('sort') : 'rank', page: Math.max(1, Number.parseInt(params.get('page'), 10) || 1) });
 }
 const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const euros = value => typeof value === 'number' ? new Intl.NumberFormat('en-IE', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(value) : 'Price unverified';
@@ -121,7 +108,7 @@ function collection() {
   if (state.tab === 'profile') return renderProfile();
   if (state.tab === 'compare') return renderCompare();
   document.querySelector('#collection-content').innerHTML = `${state.tab === 'restoration' ? '<p class="notice">Properties with severe visible deterioration, a major unfinished shell, or existing evidence of full restoration needs. Check the scope: sometimes the concern is an annex or separate ruin. Only Open homes appear here. Reviewed homes remain in their status views. Assessments are provisional and need a survey.</p>' : ''}${state.tab === 'verify' ? '<p class="notice">These homes are awaiting assessment using the same criteria as the ranked collection. Their scores will be added during the weekly update.</p>' : ''}${state.tab === 'watch' ? '<p class="notice">These homes are either above the €260,000 purchase ceiling or do not yet meet the strong-case budget gate. They retain their assessments but have no active rank. Comments and favourites do not change budget eligibility.</p>' : ''}
-  <div class="filters"><label>Find a home<input id="search" type="search" placeholder="Town, property name or ID" value="${esc(state.search)}"></label><label>Region<select id="region"><option value="">All search areas</option>${[...new Set(state.properties.filter(p => state.tab === 'closed' || !p.geographyExcluded).map(p => p.region))].sort().map(r => `<option${state.region === r ? ' selected' : ''}>${esc(r)}</option>`).join('')}</select></label><label>Province<select id="province"><option value="">All provinces</option>${provinces.map(([code, label]) => `<option value="${esc(code)}"${provinceKey(state.province) === code ? ' selected' : ''}>${esc(label)}</option>`).join('')}</select></label><label>Source<select id="source"><option value="">All sources</option><option value="idealista"${state.source === 'idealista' ? ' selected' : ''}>My Idealista list</option></select></label><label>Sort by<select id="sort"><option value="rank">Highest ranked first</option><option value="rank-desc">Lowest ranked first</option><option value="price">Lowest price</option><option value="region">Region & province</option></select></label><label class="agency-filter">Agency<select id="agency" aria-label="Agency"></select></label></div><p id="filter-context" class="small muted"></p><div class="results-line"><span id="result-count" role="status" aria-live="polite"></span><span><button class="link-button" data-tab="compare">Compare selected (${state.compare.size}/3)</button> · <button class="link-button" id="clear-filters">Reset filters</button></span></div><div id="pagination-top"></div><div id="cards" class="grid"></div><div id="pagination"></div>`;
+  <div class="filters"><label>Find a home<input id="search" type="search" placeholder="Town, property name or ID" value="${esc(state.search)}"></label><label>Region<select id="region"><option value="">All search areas</option>${[...new Set(state.properties.filter(p => state.tab === 'closed' || !p.geographyExcluded).map(p => p.region))].sort().map(r => `<option${state.region === r ? ' selected' : ''}>${esc(r)}</option>`).join('')}</select></label><label>Province<select id="province"><option value="">All provinces</option>${provinces.map(([code, label]) => `<option value="${esc(code)}"${provinceKey(state.province) === code ? ' selected' : ''}>${esc(label)}</option>`).join('')}</select></label><label>Source<select id="source"><option value="">All sources</option><option value="idealista"${state.source === 'idealista' ? ' selected' : ''}>My Idealista list</option></select></label><label>Sort by<select id="sort"><option value="rank">Highest ranked first</option><option value="rank-desc">Lowest ranked first</option><option value="price">Lowest price</option><option value="region">Region & province</option></select></label></div><p id="filter-context" class="small muted"></p><div class="results-line"><span id="result-count" role="status" aria-live="polite"></span><span><button class="link-button" data-tab="compare">Compare selected (${state.compare.size}/3)</button> · <button class="link-button" id="clear-filters">Reset filters</button></span></div><div id="pagination-top"></div><div id="cards" class="grid"></div><div id="pagination"></div>`;
   document.querySelector('#sort').value = state.sort;
   renderCards();
 }
@@ -134,7 +121,6 @@ function matches() {
   return p;
 }
 function renderCards() {
-  renderAgencyOptions();
   const properties = matches(), pages = Math.max(1, Math.ceil(properties.length / 4));
   state.page = Math.min(state.page, pages);
   rememberFilters();
@@ -207,7 +193,7 @@ document.addEventListener('click', async event => {
   else if (target.id === 'back' || target.classList.contains('brand')) { event.preventDefault(); await refresh().catch(() => {}); navigate(); }
   else if (target.dataset.tab) { state.tab = target.dataset.tab; state.page = 1; if (state.tab === 'references') navigateReference(); else { history.pushState({}, '', collectionUrl()); collection(); } }
   else if (target.dataset.page) { state.page = Number(target.dataset.page); renderCards(); document.querySelector('.filters').scrollIntoView({ block: 'start' }); }
-  else if (target.id === 'clear-filters') { Object.assign(state, { search: '', region: '', province: '', sort: 'rank', source: '', agency: '', page: 1 }); collection(); }
+  else if (target.id === 'clear-filters') { Object.assign(state, { search: '', region: '', province: '', sort: 'rank', source: '', page: 1 }); collection(); }
   else if (target.id === 'logout') { try { await api('/api/logout', { method: 'POST' }); state.properties = []; state.meta = {}; state.detail = null; Object.assign(referenceState, { homes: [], meta: null, detail: null }); login(); } catch (e) { toast(e.message); } }
   else if (target.dataset.photo !== undefined) { const n = Number(target.dataset.photo), p = state.detail.property, dialog = document.querySelector('#lightbox'); dialog.querySelector('img').src = `/api/media/${p.id}/${n}`; dialog.querySelector('img').alt = p.photos[n].caption; dialog.querySelector('p').textContent = p.photos[n].caption; dialog.showModal(); }
   else if (target.classList.contains('lightbox-close')) document.querySelector('#lightbox').close();
@@ -216,7 +202,7 @@ document.addEventListener('click', async event => {
 document.addEventListener('input', event => { if (event.target.id === 'search') { state.search = event.target.value; state.page = 1; renderCards(); } });
 document.addEventListener('change', event => {
   const t = event.target;
-  if (['region', 'province', 'sort', 'source', 'agency'].includes(t.id)) {
+  if (['region', 'province', 'sort', 'source'].includes(t.id)) {
     state[t.id] = t.value; state.page = 1;
     if (t.id === 'region') state.province = '';
     if (t.id === 'source' && t.value === 'idealista' && !['restoration', 'interested', 'hold', 'closed'].includes(state.tab)) state.tab = 'active';
