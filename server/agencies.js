@@ -13,7 +13,8 @@ const aliases = new Map([
 function agency(value) {
   if (typeof value !== 'string') return null;
   // Older imports append a contact name or listing reference after a middle dot.
-  const name = value.split(/\s*·\s*/)[0].replace(/\s+/g, ' ').trim();
+  const name = value.split(/\s*·\s*/)[0].split(/;\s*ref\b/i)[0].replace(/\s+/g, ' ').trim();
+  if (/^private (?:advertiser|seller)\b/i.test(name)) return null;
   if (!name || /^(?:see original advert|unknown|not (?:recorded|known|specified|available)|n\/?a|[-—])$/i.test(name)
     || /^(?:agent not |advertiser in )/i.test(name) || /name not captured/i.test(name)
     || /^(?:https?:\/\/|idealista(?:\.it)?$|immobiliare\.it$|casa\.it$|wikicasa(?:\.it)?$|gate-away(?:\.com)?$)/i.test(name)) return null;

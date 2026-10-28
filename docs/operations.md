@@ -144,3 +144,10 @@ Report feedback effects, newly assessed saved homes, duplicate merges, score/ran
 Ranked homes, Active homes, Price watch, To evaluate, Major restoration, Favourites and All homes show only Open properties. Interested, On hold and Closed & excluded are the explicit decision views. Interested does not override budget or availability gates; archived properties remain only in Closed & excluded. Applying My Idealista list within a status view keeps that view selected. Counts, agency options and pagination use the same visibility rule.
 
 This is a display filter: stored scores, budget pools and global rank numbers are preserved. Setting a reviewed home back to Open returns it to its eligible browsing list. Status and favourite decisions remain shared by Peter and Rebecka; imports never reopen them.
+
+
+## Geography and advertiser cleanup — 28 October 2026
+
+Administrative geography is canonical: Piemonte (not a separate Piedmont entry), Trentino-Alto Adige with Trento (TN) or Bolzano (BZ), and two-letter province codes. server/geography.js normalizes stored legacy labels and full province names. Dolomiti is retained as searchArea when relevant; it is not an administrative region. Veneto and Valle d’Aosta are excluded from active pools, including DL properties whose real province is Belluno. Their sources, scores, personal statuses and histories remain intact in the archive. Province/region filters hide geographically excluded regions outside the archive.
+
+Record exact-source advertiser metadata: agency and an agency-verification source for professional advertisers, advertiserType=private for a private seller, agencyReview with a truthful date/outcome when unresolved. Private sellers are separate from Agency not recorded; do not use a private person’s name as an agency. A source failure is not evidence of sale or withdrawal. Recheck unresolved names during ordinary scans and preserve the latest owner feedback.

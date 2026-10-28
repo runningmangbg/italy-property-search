@@ -20,7 +20,7 @@ test('Piedmont homes support imports, media, shared-list matches and preserved o
     const payload = { sourceRevision: 'piedmont-first', observedAt: '2026-10-27T20:00:00Z', properties: [property] };
     await request(app).post('/api/import').set('Authorization', `Bearer ${secret}`).send(payload).expect(200);
     const detail = (await owner.get('/api/properties/PM001').expect(200)).body.property;
-    assert.equal(detail.region, 'Piedmont');
+    assert.equal(detail.region, 'Piemonte');
     assert.equal(detail.administrativeRegion, 'Piemonte');
     assert.equal(detail.pool, 'verify');
     assert.equal(detail.rank, null);
@@ -122,7 +122,8 @@ test('Dolomiti dossiers support imports, photos, reference links, routes and pre
   const payload={sourceRevision:'dolomiti-first',observedAt:'2026-09-27T15:00:00Z',properties:[property]};
   await request(app).post('/api/import').set('Authorization',`Bearer ${secret}`).send(payload).expect(200);
   const detail=(await bob.get('/api/properties/DL001').expect(200)).body.property;
-  assert.equal(detail.region,'Dolomiti'); assert.equal(detail.administrativeRegion,'Veneto');
+  assert.equal(detail.region,'Veneto'); assert.equal(detail.administrativeRegion,'Veneto');
+  assert.equal(detail.searchArea,'Dolomiti'); assert.equal(detail.geographyExcluded,true);
   await bob.get('/properties/DL001').expect(200).expect('Content-Type',/html/);
   await bob.get('/DL001.html').expect(200).expect('Content-Type',/html/);
   const image=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=','base64');

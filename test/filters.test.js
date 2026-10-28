@@ -22,6 +22,24 @@ const agencySample = sample.map(p => ({ ...p, agencies: ['AB001', 'AB003', 'AB00
   ? [{ id: 'monica-bruni-real-estate', name: 'Monica Bruni Real Estate' }, ...(p.id === 'AB001' ? [{ id: 'immobiliare-puzielli', name: 'Immobiliare Puzielli' }] : [])]
   : [] }));
 
+test('region and agency filters separate archived geography and private sellers with complete province labels', async () => {
+  const properties = [home('PM001', 'ranked', { region: 'Piemonte', province: 'TO' }),
+    home('DL001', 'ranked', { region: 'Trentino-Alto Adige', province: 'TN', advertiserType: 'private' }),
+    home('IL12345678', 'excluded', { region: "Valle d'Aosta", province: 'AO', geographyExcluded: true }),
+    home('DL002', 'excluded', { region: 'Veneto', province: 'BL', geographyExcluded: true })];
+  const page = await filterPage(properties);
+  assert.doesNotMatch(page.node('#collection-content').innerHTML, /<option>Veneto<\/option>/);
+  assert.match(page.node('#collection-content').innerHTML, /Torino \(TO\)/);
+  assert.match(page.node('#agency').innerHTML, /Private seller \(1\)/);
+  await page.change('agency', 'private');
+  assert.deepEqual(page.ids(), ['DL001']);
+  assert.match(page.node('#cards').innerHTML, /Private seller/);
+  const archive = await filterPage(properties, '/?view=closed');
+  assert.match(archive.node('#collection-content').innerHTML, /Aosta \(AO\)/);
+  const legacy = await filterPage(properties, '/?region=Piedmont');
+  assert.deepEqual(legacy.ids(), ['PM001']);
+});
+
 test('agency filters combine with source, geography, views and sort while counting physical homes once', async () => {
   const page = await filterPage(agencySample);
   assert.match(page.node('#collection-content').innerHTML, /Agency<select id="agency"/);

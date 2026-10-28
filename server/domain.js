@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { collectionRows } from './collection.js';
 import { earliestListingDay } from './listing-age.js';
+import { normalizeGeography, excludedGeography } from './geography.js';
 export const digest = value => createHash('sha256').update(typeof value === 'string' || Buffer.isBuffer(value) ? value : JSON.stringify(value)).digest('hex');
 
 export function normalizeDossier(dossier) {
@@ -24,12 +25,16 @@ export function budget(property, decision = {}) {
   const gatedFromRanking = known && price <= 260000 && property.budgetEligible === false;
   let pool = !known ? 'verify' : price > 260000 || gatedFromRanking ? 'watch' : 'ranked';
   if (pool === 'ranked' && (property.evaluationPending || ('score' in property && !Number.isFinite(property.score)))) pool = 'verify';
+  const geographyExcluded = excludedGeography(property);
+  if (geographyExcluded) pool = 'excluded';
   const status = decision.effective_status || decision.status;
   if (['On hold', 'Closed'].includes(status)) pool = status === 'Closed' ? 'closed' : 'hold';
   if (!['closed', 'hold'].includes(pool) && (decision.rejection_reference_ids?.length || decision.removed_reference_ids?.length)) pool = 'excluded';
   if (['withdrawn', 'sold', 'removed', 'unavailable'].includes(property.availability)) pool = 'inactive';
   return {
     pool,
+    geographyExcluded,
+    geographyExclusionReason: geographyExcluded ? 'Outside current search: Veneto and Valle d’Aosta excluded by Peter on 28 October 2026.' : '',
     band: !known ? 'Price unverified' : gatedFromRanking ? 'Price watch — strong case not established' : price <= 200000 ? 'Target budget' : price <= 225000 ? 'Above target' : price <= 260000 ? 'Stretch: strong case required' : 'Price watch',
     reductionToTarget: known ? Math.max(0, price - 200000) : null,
     reductionToCeiling: known ? Math.max(0, price - 260000) : null,
@@ -38,6 +43,7 @@ export function budget(property, decision = {}) {
 }
 
 export function rank(rows) {
+  rows = rows.map(r => ({ ...r, data: normalizeGeography(r.data) }));
   // Adapt stored spreadsheet rows too, so older imports open without rewriting history.
   const properties = rows.map(r => ({ ...r.data, dossier: normalizeDossier(r.data.dossier), status: r.status || 'Open', favourite: r.favourite || false, revision: r.revision || 0, commentCount: Number(r.comment_count || 0), importedAt: r.imported_at, rejectionReferenceIds: r.rejection_reference_ids || [], rejected: !!r.rejection_reference_ids?.length, referenceRejected: !!r.rejection_reference_ids?.length, referenceRemoved: !!r.removed_reference_ids?.length, jointRejectionReferenceIds: r.joint_rejection_reference_ids || [], jointlyRejected: !!r.joint_rejection_reference_ids?.length, removedFromSharedList: !!r.removed_reference_ids?.length, removedReferenceIds: r.removed_reference_ids || [], ...budget(r.data, r), rank: null }));
   properties.sort((a, b) => (b.score ?? -1) - (a.score ?? -1) || (b.components?.['Owner privacy /15'] ?? 0) - (a.components?.['Owner privacy /15'] ?? 0) || (b.components?.['B&B /14'] ?? 0) - (a.components?.['B&B /14'] ?? 0) || (a.price ?? Infinity) - (b.price ?? Infinity) || a.id.localeCompare(b.id));
