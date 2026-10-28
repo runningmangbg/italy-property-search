@@ -124,7 +124,7 @@ export function createApp({ db, users = [], importToken = '', production = false
   });
   // Operator-only asset inventory: no sessions, feedback, credentials or history.
   app.get('/api/import/asset-audit', importer, async (req, res) => {
-    const properties = (await db.query('SELECT id,data FROM properties ORDER BY id')).rows.map(({id,data}) => ({ id, name:data.name, source:data.source, sources:(data.sources || []).map(s=>({url:s.url,role:s.role})), photos:data.photos || [], referencePhoto:data.referencePhoto || null }));
+    const properties = (await db.query('SELECT id,data FROM properties ORDER BY id')).rows.map(({id,data}) => ({ id, name:data.name, price:data.price, score:data.score, region:data.region, province:data.province, source:data.source, preferredListingUrl:data.preferredListingUrl, linkAudit:data.linkAudit, sources:(data.sources || []).map(s=>({url:s.url,role:s.role})), photos:data.photos || [], referencePhoto:data.referencePhoto || null }));
     const media = (await db.query('SELECT property_id,image_index,mime_type,octet_length(bytes) AS byte_length,content_hash FROM media ORDER BY property_id,image_index')).rows;
     res.json({ properties, media });
   });
