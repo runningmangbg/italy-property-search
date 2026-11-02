@@ -15,7 +15,7 @@ function photoReviewPanel(p) {
   const r = p.photoReview;
   if (!r) return '';
   const s = r.scores;
-  return `<section class="panel"><h2>Condition & views</h2>${photoReviewChips(p)}<p class="small muted">Reviewed ${date(r.reviewDate)} · ${esc(r.imageCount)} saved images · ${esc(r.confidence)} confidence</p>
+  return `<section class="panel"><h2>Condition & views</h2>${photoReviewChips(p)}<p class="small muted">Reviewed ${date(r.reviewDate)} · ${esc(r.imageCount)} images reviewed · ${esc(r.confidence)} confidence</p>
   <h3>Building condition</h3><p><strong>${esc(r.condition?.scope)}</strong></p><p>${esc(r.condition?.observation)}</p>
   <h3>The outlook</h3><p>${esc(r.views?.observation)}</p>
   ${s ? `<p class="small">Technical: ${esc(s.before?.['Technical /5'])} → ${esc(s.after?.['Technical /5'])}/5 · Outdoor, views & sun: ${esc(s.before?.['Outdoor views sun /10'])} → ${esc(s.after?.['Outdoor views sun /10'])}/10 · Total at review: ${esc(s.totalBefore)} → ${esc(s.totalAfter)}/100.</p>` : ''}
