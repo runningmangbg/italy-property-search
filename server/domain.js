@@ -25,6 +25,8 @@ export function budget(property, decision = {}) {
   const gatedFromRanking = known && price <= 260000 && property.budgetEligible === false;
   let pool = !known ? 'verify' : price > 260000 || gatedFromRanking ? 'watch' : 'ranked';
   if (pool === 'ranked' && (property.evaluationPending || ('score' in property && !Number.isFinite(property.score)))) pool = 'verify';
+  // Northern qualification applies to Price Watch as well as the ranked pool.
+  if (property.northernQualification === 'pending' && ['ranked', 'watch'].includes(pool)) pool = 'verify';
   if (property.advertReachability === 'unverified') pool = 'unverified';
   const geographyExcluded = excludedGeography(property);
   const northernFitExcluded = property.northernQualification === 'not-qualified';
