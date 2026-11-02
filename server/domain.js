@@ -27,7 +27,8 @@ export function budget(property, decision = {}) {
   if (pool === 'ranked' && (property.evaluationPending || ('score' in property && !Number.isFinite(property.score)))) pool = 'verify';
   if (property.advertReachability === 'unverified') pool = 'unverified';
   const geographyExcluded = excludedGeography(property);
-  if (geographyExcluded) pool = 'excluded';
+  const northernFitExcluded = property.northernQualification === 'not-qualified';
+  if (geographyExcluded || northernFitExcluded) pool = 'excluded';
   const status = decision.effective_status || decision.status;
   if (['On hold', 'Closed'].includes(status)) pool = status === 'Closed' ? 'closed' : 'hold';
   if (!['closed', 'hold'].includes(pool) && (decision.rejection_reference_ids?.length || decision.removed_reference_ids?.length)) pool = 'excluded';
@@ -36,6 +37,8 @@ export function budget(property, decision = {}) {
     pool,
     geographyExcluded,
     geographyExclusionReason: geographyExcluded ? 'Outside current search: Veneto and Valle d’Aosta excluded by Peter on 28 October 2026.' : '',
+    northernFitExcluded,
+    northernFitExclusionReason: northernFitExcluded ? (property.northernQualificationReason || 'Northern candidate did not establish the especially-good overall HOME + B&B case required by Peter.') : '',
     band: !known ? 'Price unverified' : gatedFromRanking ? 'Price watch — strong case not established' : price <= 200000 ? 'Target budget' : price <= 225000 ? 'Above target' : price <= 260000 ? 'Stretch: strong case required' : 'Price watch',
     reductionToTarget: known ? Math.max(0, price - 200000) : null,
     reductionToCeiling: known ? Math.max(0, price - 260000) : null,
